@@ -42,21 +42,45 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
 function parseFreeInput(text) {
   const lower = text.toLowerCase();
 
+  // Долги — оставляем как есть (временно не обрабатываем)
   if (lower.startsWith('дал ') || lower.startsWith('выдал ')) {
-    // ... (твой код для долгов без изменений)
-    return { action: 'lend', ... };
+    const parts = text.split(' ');
+    if (parts.length < 3) return null;
+    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+    const amount = parseFloat(parts[2]);
+    const comment = parts.slice(3).join(' ');
+    if (isNaN(amount) || amount <= 0) return null;
+    return { action: 'lend', debtor, amount, comment };
   }
 
   if (lower.startsWith('вернули ') || lower.startsWith('вернул ')) {
-    // ... 
-    return { action: 'return_debt', ... };
+    const parts = text.split(' ');
+    if (parts.length < 3) return null;
+    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+    const amount = parseFloat(parts[2]);
+    const comment = parts.slice(3).join(' ');
+    if (isNaN(amount) || amount <= 0) return null;
+    return { action: 'return_debt', debtor, amount, comment };
   }
 
   if (lower.startsWith('добавить долг ')) {
-    // ...
-    return { action: 'opening_debt', ... };
+    const rest = text.slice(13).trim();
+    const words = rest.split(' ');
+    let amount = 0, amountIndex = -1;
+    for (let i = 0; i < words.length; i++) {
+      amount = parseFloat(words[i]);
+      if (!isNaN(amount) && amount > 0) {
+        amountIndex = i;
+        break;
+      }
+    }
+    if (amountIndex === -1 || amount <= 0 || amountIndex === 0) return null;
+    const debtor = words.slice(0, amountIndex).join(' ').replace(/^\w/, c => c.toUpperCase());
+    const comment = words.slice(amountIndex + 1).join(' ');
+    return { action: 'opening_debt', debtor, amount, comment };
   }
 
+  // Обычные транзакции
   const { wallet, cleaned } = extractWallet(text);
   const words = cleaned.trim().split(/\s+/);
 
@@ -85,7 +109,6 @@ function parseFreeInput(text) {
 
 async function handleFreeInput(ctx) {
   const text = ctx.message.text.trim();
-
   const parsed = parseFreeInput(text);
 
   if (!parsed || parsed.action !== 'transaction') {
@@ -96,7 +119,7 @@ async function handleFreeInput(ctx) {
   const result = await addTransaction(parsed.kind, parsed.amount, parsed.category, '', parsed.wallet);
 
   if (!result.success) {
-    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись в таблицу', mainKeyboard());
+    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
     return;
   }
 
