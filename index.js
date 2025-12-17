@@ -7,15 +7,12 @@ const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use(express.json());
 
-// Подключаем модули (важно: sheets первым!)
-require('./sheets'); // инициализация Google Sheets и global.transactionsSheet, debtsSheet
+// Подключаем клавиатуры и утилиты (синхронные)
 require('./keyboards');
 require('./utils');
 
-// Подключаем функционал
-const { sendBalance } = require('./balance');
-const { handleInitial } = require('./initial');
-const { handleTransfer } = require('./transfer');
+// === Инициализация Google Sheets (асинхронная) ===
+const initSheets = require('./sheets'); // sheets.js экспортирует промис или функцию
 
 // === Приветствие ===
 function helpText() {
@@ -29,42 +26,55 @@ function helpText() {
 Нажми кнопки 👇`;
 }
 
-bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
-bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
+// Запуск после полной инициализации
+(async () => {
+  try {
+    await initSheets; // ждём, пока sheets.js завершит инициализацию
 
-// === Команды ===
-bot.command('баланс', sendBalance);
-bot.command('остаток', handleInitial);
-bot.command('перевод', handleTransfer);
+    console.log('Все модули инициализированы');
 
-// === Кнопки ===
-bot.action('balance', sendBalance);
-bot.action('transfer', async (ctx) => {
-  await ctx.answerCbQuery();
-  await ctx.reply('Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', require('./keyboards').menuKeyboard());
-});
+    // Теперь подключаем функционал (когда таблицы уже готовы)
+    const { sendBalance } = require('./balance');
+    const { handleInitial } = require('./initial');
+    const { handleTransfer } = require('./transfer');
 
-// Заглушки для остальных кнопок
-bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
-  await ctx.answerCbQuery('В разработке 🚧');
-});
+    // Команды
+    bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
+    bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
 
-bot.action('menu', async (ctx) => {
-  await ctx.editMessageText(helpText(), { reply_markup: require('./keyboards').mainKeyboard().reply_markup });
-  await ctx.answerCbQuery();
-});
+    bot.command('баланс', sendBalance);
+    bot.command('остаток', handleInitial);
+    bot.command('перевод', handleTransfer);
 
-// Обработка ошибок
-bot.catch((err, ctx) => {
-  console.error('Bot error:', err);
-  ctx.reply('Произошла ошибка 😔').catch(() => {});
-});
+    // Кнопки
+    bot.action('balance', sendBalance);
+    bot.action('transfer', async (ctx) => {
+      await ctx.answerCbQuery();
+      await ctx.reply('Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', require('./keyboards').menuKeyboard());
+    });
 
-// Webhook
-app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
-app.get('/', (req, res) => res.send('Бюджет-бот работает! 🚀'));
+    bot.action('menu', async (ctx) => {
+      await ctx.editMessageText(helpText(), { reply_markup: require('./keyboards').mainKeyboard().reply_markup });
+      await ctx.answerCbQuery();
+    });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Сервер запущен на порту ${PORT}`);
-});
+    // Заглушки
+    bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
+      await ctx.answerCbQuery('В разработке 🚧');
+    });
+
+    bot.catch((err) => console.error('Bot error:', err));
+
+    // Webhook
+    app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
+    app.get('/', (req, res) => res.send('Бюджет-бот работает! 🚀'));
+
+    const PORT = process.env.PORT || 3000;
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Сервер запущен на порту ${PORT}`);
+    });
+
+  } catch (error) {
+    console.error('Ошибка при запуске:', error);
+  }
+})();
