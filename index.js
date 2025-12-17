@@ -8,11 +8,16 @@ const bot = new Telegraf(TOKEN);
 const doc = new GoogleSpreadsheet(SHEET_ID);
 
 async function initDoc() {
+  // Новая авторизация для v4+
+  doc.useServiceAccountAuth = undefined; // не нужен
+
   await doc.useServiceAccountAuth({
     client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   });
+
   await doc.loadInfo();
+  console.log('Таблица подключена:', doc.title);
 }
 
 initDoc().catch(err => console.error('Ошибка подключения к таблице:', err));
