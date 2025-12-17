@@ -1,6 +1,7 @@
 const { Telegraf, Markup } = require('telegraf');
 const express = require('express');
 const { GoogleSpreadsheet } = require('google-spreadsheet');
+const { JWT } = require('google-auth-library'); // Новый импорт
 
 const BOT_TOKEN = '8269910739:AAEywu7dOX8WB9TDG6y8WH-fAoV5_foRhzU';
 const SHEET_ID = '1qu5qJSv1jVZAU5yBbHC0AlC07udvv869SIarN3qdkzs';
@@ -113,24 +114,30 @@ function helpText() {
 Нажми кнопки ниже 👇`;
 }
 
-// === Инициализация Google Sheets ===
+// === Инициализация Google Sheets (новый способ для v4+) ===
 async function initSheets() {
-  const doc = new GoogleSpreadsheet(SHEET_ID);
-  await doc.useServiceAccountAuth({
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+  // Создаём JWT-клиент
+  const serviceAccountAuth = new JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
   });
-  await doc.loadInfo();
 
+  const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
+
+  await doc.loadInfo(); // Загружаем метаданные таблицы
+
+  // Transactions
   let sheet = doc.sheetsByTitle['Transactions'];
   if (!sheet) sheet = await doc.addSheet({ title: 'Transactions', headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк'] });
   transactionsSheet = sheet;
 
+  // Debts
   sheet = doc.sheetsByTitle['Debts'];
   if (!sheet) sheet = await doc.addSheet({ title: 'Debts', headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент'] });
   debtsSheet = sheet;
 
-  console.log('Google Sheets инициализированы');
+  console.log('Google Sheets инициализированы и подключены');
 }
 
 // === Запуск ===
@@ -173,13 +180,13 @@ async function initSheets() {
     app.listen(PORT, '0.0.0.0', async () => {
       console.log(`Сервер запущен на порту ${PORT} и интерфейсе 0.0.0.0`);
 
-      // Установка webhook — раскомментируй только на первом деплое!
+      // Установка webhook (раскомментируй только на первом деплое после успеха)
       // const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/bot${BOT_TOKEN}`;
       // await bot.telegram.setWebhook(url);
       // console.log('Webhook установлен:', url);
     });
 
   } catch (error) {
-    console.error('Критическая ошибка:', error);
+    console.error('Критическая ошибка при запуске:', error);
   }
 })();
