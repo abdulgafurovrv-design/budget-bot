@@ -272,12 +272,17 @@ function parseFreeInput(text) {
     console.log('Google Sheets подключены');
 
     // Команды и действия
-    bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
+        bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.command('баланс', sendBalance);
+    bot.command('debtors', sendDebtors);  // ← новая строка
 
     bot.action('balance', sendBalance);
+    bot.action('debtors', sendDebtors);   // ← новая строка
     bot.action('menu', async (ctx) => {
+      await ctx.editMessageText('Главное меню', { reply_markup: mainKeyboard().reply_markup });
+      await ctx.answerCbQuery();
+    });
       await ctx.editMessageText('Главное меню', { reply_markup: mainKeyboard().reply_markup });
       await ctx.answerCbQuery();
     });
