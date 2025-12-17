@@ -74,7 +74,10 @@ async function getBalance() {
   });
 
   const debtRows = await debtsSheet.getRows();
-  const debtTotal = debtRows.reduce((sum, row) => sum + (Number(row.get('Сумма')) || 0 > 0 ? Number(row.get('Сумма')) || 0 : 0), 0);
+  const debtTotal = debtRows.reduce((sum, row) => {
+    const amount = Number(row.get('Сумма')) || 0;
+    return sum + (amount > 0 ? amount : 0);
+  }, 0);
 
   balances.долги = debtTotal;
   return balances;
@@ -264,12 +267,13 @@ function parseFreeInput(text) {
 
     console.log('Google Sheets подключены');
 
+    // Команды
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.command('баланс', sendBalance);
     bot.command('debtors', sendDebtors);
 
-    // /остаток с ручной проверкой аргументов
+    // /остаток
     bot.command('остаток', async (ctx) => {
       const parts = ctx.message.text.trim().split(' ');
       if (parts.length < 3) {
@@ -289,6 +293,7 @@ function parseFreeInput(text) {
       await ctx.reply(`Начальный остаток установлен: ${amount.toFixed(2)} ₽ на #${wallet}\nТекущий баланс: ${balances[wallet].toFixed(2)} ₽`, menuKeyboard());
     });
 
+    // Кнопки
     bot.action('balance', sendBalance);
     bot.action('debtors', sendDebtors);
     bot.action('menu', async (ctx) => {
@@ -325,10 +330,9 @@ function parseFreeInput(text) {
       await ctx.answerCbQuery('В разработке 🚧');
     });
 
-    // Свободный ввод
+    // Свободный ввод — БЕЗ блокировки команд
     bot.on('text', async (ctx) => {
       const text = ctx.message.text.trim();
-      if (text.startsWith('/')) return;
 
       const parsed = parseFreeInput(text);
       if (!parsed) {
