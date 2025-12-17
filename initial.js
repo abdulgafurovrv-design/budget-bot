@@ -1,5 +1,5 @@
 // initial.js
-const { addTransaction } = require('./transaction'); // пока заглушка, потом подключим настоящий
+const { transactionsSheet } = global;
 const { menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 const { getBalance } = require('./balance');
@@ -21,9 +21,12 @@ async function handleInitial(ctx) {
     return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
   }
 
-  // Используем addTransaction из transaction.js (создадим позже) или временно дублируем
   const date = new Date().toLocaleString('ru-RU');
-  const rows = await global.transactionsSheet.getRows();
+
+  // Перед getRows() — обязательно loadInfo()
+  await transactionsSheet.loadInfo();
+  const rows = await transactionsSheet.getRows();
+
   let maxId = 0;
   rows.forEach(r => {
     const id = Number(r.get('ID')) || 0;
@@ -31,7 +34,7 @@ async function handleInitial(ctx) {
   });
   const id = maxId + 1;
 
-  await global.transactionsSheet.addRow({
+  await transactionsSheet.addRow({
     ID: id,
     Дата: date,
     Тип: 'доход',
