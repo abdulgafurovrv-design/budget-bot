@@ -6,7 +6,7 @@ const SHEET_ID = '1qu5qJSv1jVZAU5yBbHC0AlC07udvv869SIarN3qdkzs';
 global.transactionsSheet = null;
 global.debtsSheet = null;
 
-(async () => {
+module.exports = (async () => {
   try {
     const serviceAccountAuth = new JWT({
       email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -47,8 +47,9 @@ global.debtsSheet = null;
     }
     global.debtsSheet = sheet;
 
-    console.log('Google Sheets подключены и готовы');
+    console.log('Google Sheets инициализированы');
   } catch (error) {
-    console.error('Ошибка подключения к Google Sheets:', error);
+    console.error('Ошибка инициализации Google Sheets:', error);
+    throw error;
   }
 })();
