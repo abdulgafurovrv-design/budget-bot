@@ -1,4 +1,4 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf } = require('telegraf');
 const express = require('express');
 
 const BOT_TOKEN = '8269910739:AAEywu7dOX8WB9TDG6y8WH-fAoV5_foRhzU';
@@ -7,60 +7,64 @@ const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use(express.json());
 
-// Подключаем модули
-require('./sheets'); // инициализация Google Sheets
-require('./keyboards'); // клавиатуры
-require('./utils'); // утилиты
+// Подключаем модули (важно: sheets первым!)
+require('./sheets'); // инициализация Google Sheets и global.transactionsSheet, debtsSheet
+require('./keyboards');
+require('./utils');
 
-// Подключаем функционал (пока заглушки)
-require('./balance');
-require('./initial');
-require('./transfer');
-// require('./transaction');
-// require('./debt');
-// require('./cancel');
+// Подключаем функционал
+const { sendBalance } = require('./balance');
+const { handleInitial } = require('./initial');
+const { handleTransfer } = require('./transfer');
 
 // === Приветствие ===
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
 
-Функционал добавляем по шагам.
-
 Доступно:
-• Баланс
-• Начальный остаток (/остаток)
-• Перевод между кошельками
+• Баланс (кнопка или /баланс)
+• Начальный остаток (/остаток кошелёк сумма)
+• Перевод (/перевод от_кошелька к_кошельку сумма)
 
 Нажми кнопки 👇`;
 }
 
-const { sendBalance } = require('./balance');
-const { handleInitial } = require('./initial');
-const { handleTransfer } = require('./transfer');
+bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
+bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
 
-// Команды и кнопки
+// === Команды ===
 bot.command('баланс', sendBalance);
 bot.command('остаток', handleInitial);
 bot.command('перевод', handleTransfer);
 
+// === Кнопки ===
 bot.action('balance', sendBalance);
-bot.action('transfer', (ctx) => ctx.reply('Используй команду /перевод от_кошелёк к_кошельку сумма\nПример: /перевод карта депозит 50000', menuKeyboard()));
-bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
-bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
+bot.action('transfer', async (ctx) => {
+  await ctx.answerCbQuery();
+  await ctx.reply('Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', require('./keyboards').menuKeyboard());
+});
 
-// Заглушки для кнопок, которые ещё не реализованы
-bot.action(['report', 'debtors', 'expense', 'income', 'cancel_last'], async (ctx) => {
+// Заглушки для остальных кнопок
+bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
   await ctx.answerCbQuery('В разработке 🚧');
 });
 
-bot.catch((err) => console.error('Bot error:', err));
+bot.action('menu', async (ctx) => {
+  await ctx.editMessageText(helpText(), { reply_markup: require('./keyboards').mainKeyboard().reply_markup });
+  await ctx.answerCbQuery();
+});
+
+// Обработка ошибок
+bot.catch((err, ctx) => {
+  console.error('Bot error:', err);
+  ctx.reply('Произошла ошибка 😔').catch(() => {});
+});
 
 // Webhook
 app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
-app.get('/', (req, res) => res.send('Бюджет-бот жив! 🚀'));
+app.get('/', (req, res) => res.send('Бюджет-бот работает! 🚀'));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Сервер запущен на порту ${PORT}`);
 });
-
