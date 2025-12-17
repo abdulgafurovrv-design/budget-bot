@@ -6,11 +6,12 @@ const { getBalance } = require('./balance');
 
 const lastOperations = new Map(); // chatId → { type: 'trans', id }
 
-async function addTransaction(type, amount, category, wallet = DEFAULT_WALLET) {
+async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   const date = new Date().toLocaleString('ru-RU');
   const sign = type === 'доход' ? amount : -amount;
   wallet = normWallet(wallet);
 
+  await transactionsSheet.loadInfo(); // ← обязательно перед getRows()
   const rows = await transactionsSheet.getRows();
   let maxId = 0;
   rows.forEach(r => {
@@ -25,13 +26,11 @@ async function addTransaction(type, amount, category, wallet = DEFAULT_WALLET) {
     Тип: type,
     Сумма: sign,
     Категория: category,
-    Комментарий: '',
+    Комментарий: comment,
     Кошелёк: wallet
   });
 
-  // Обновляем кэш для немедленного отображения баланса
-  await transactionsSheet.resetLocalCache();
-
+  // Кэш уже сброшен после addRow, но для следующего вызова getBalance он будет перезагружен
   return { id };
 }
 
