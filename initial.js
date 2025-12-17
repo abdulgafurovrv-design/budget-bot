@@ -1,5 +1,5 @@
 // initial.js
-const { transactionsSheet } = global;
+const { transactionsSheet, doc } = global; // ← добавили doc
 const { menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 const { getBalance } = require('./balance');
@@ -23,8 +23,8 @@ async function handleInitial(ctx) {
 
   const date = new Date().toLocaleString('ru-RU');
 
-  // Обновляем кэш перед чтением строк
-  await transactionsSheet.resetLocalCache();
+  // Перезагружаем метаданные перед чтением
+  await doc.loadInfo();
   const rows = await transactionsSheet.getRows();
 
   let maxId = 0;
