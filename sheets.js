@@ -3,7 +3,8 @@ const { GoogleSpreadsheet } = require('google-spreadsheet');
 const SHEET_ID = '1qu5qJSv1jVZAU5yBbHC0AlC07udvv869SIarN3qdkzs';
 const doc = new GoogleSpreadsheet(SHEET_ID);
 
-let transactionsSheet, debtsSheet;
+global.transactionsSheet = null;
+global.debtsSheet = null;
 
 async function initDoc() {
   await doc.useServiceAccountAuth({
@@ -11,10 +12,34 @@ async function initDoc() {
     private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   });
   await doc.loadInfo();
+  console.log('Таблица подключена:', doc.title);
 }
 
 async function initSheets() {
-  // ... код инициализации листов ...
+  await doc.loadInfo();
+
+  let sheet = doc.sheetsByTitle['Transactions'];
+  if (!sheet) {
+    sheet = await doc.addSheet({
+      title: 'Transactions',
+      headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']
+    });
+  }
+  global.transactionsSheet = sheet;
+
+  sheet = doc.sheetsByTitle['Debts'];
+  if (!sheet) {
+    sheet = await doc.addSheet({
+      title: 'Debts',
+      headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']
+    });
+  }
+  global.debtsSheet = sheet;
+
+  console.log('Листы инициализированы');
 }
 
-module.exports = { initDoc, initSheets, transactionsSheet, debtsSheet };
+initDoc().catch(err => console.error('Ошибка авторизации:', err));
+initSheets().catch(err => console.error('Ошибка инициализации листов:', err));
+
+module.exports = {};
