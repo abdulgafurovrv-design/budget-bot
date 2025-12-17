@@ -1,6 +1,5 @@
 // balance.js
-// balance.js
-const { transactionsSheet, debtsSheet, doc } = global; // ← добавляем doc
+const { transactionsSheet, debtsSheet, doc } = global; // ← добавили doc
 const { mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 
@@ -34,11 +33,6 @@ async function getBalance() {
   return balances;
 }
 
-// sendBalance остаётся без изменений (как в твоём коде)
-
-module.exports = { sendBalance, getBalance };
-
-// balance.js — исправленный sendBalance
 async function sendBalance(ctx) {
   const balances = await getBalance();
 
@@ -49,7 +43,7 @@ async function sendBalance(ctx) {
 
   mainWallets.forEach(w => {
     const bal = balances[w] || 0;
-    totalMain += bal;  // ← теперь долги тоже входят в итог
+    totalMain += bal;
     msg += `• ${w.charAt(0).toUpperCase() + w.slice(1)}: ${bal.toFixed(2)} ₽\n`;
   });
 
