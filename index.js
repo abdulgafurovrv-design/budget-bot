@@ -8,31 +8,13 @@ const bot = new Telegraf(TOKEN);
 const doc = new GoogleSpreadsheet(SHEET_ID);
 
 async function initDoc() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const key = process.env.GOOGLE_PRIVATE_KEY;
-
-  console.log('EMAIL:', email ? 'задан' : 'НЕ ЗАДАН');
-  console.log('KEY length:', key ? key.length : 'НЕ ЗАДАН');
-
-  if (!email || !key) {
-    console.error('Переменные GOOGLE_SERVICE_ACCOUNT_EMAIL или GOOGLE_PRIVATE_KEY не заданы');
-    return;
-  }
-
-  const fixedKey = key.replace(/\\n/g, '\n');
-
   await doc.useServiceAccountAuth({
-    client_email: email,
-    private_key: fixedKey,
+    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   });
-
   await doc.loadInfo();
   console.log('Таблица подключена:', doc.title);
 }
-
-initDoc().catch(err => {
-  console.error('Ошибка авторизации:', err.message);
-});
 
 initDoc().catch(err => console.error('Ошибка подключения к таблице:', err));
 
@@ -111,6 +93,27 @@ function menuKeyboard() {
   ]);
 }
 
+// === Справка ===
+function helpText_() {
+  return "<b>Привет! Я твой бюджет-бот 🚀</b>\n\n" +
+         "Теперь я работаю мгновенно на Render!\n\n" +
+         "<b>Кошельки:</b> Карта, Наличка, Евро, Доллары, Депозит, Долги\n\n" +
+         "<b>Свободный ввод:</b>\n" +
+         "• 500 кофе #карта\n" +
+         "• +10000 зарплата\n" +
+         "• дал Иван 500\n" +
+         "• вернули Иван 200\n" +
+         "• добавить долг Петр 1500\n\n" +
+         "<b>Команды:</b>\n" +
+         "/баланс — остатки + ИТОГ\n" +
+         "/отчет — последние транзакции\n" +
+         "/debtors — должники\n" +
+         "/остаток карта 50000 — начальный остаток\n" +
+         "/перевод 10000 карта депозит — перевод\n" +
+         "/удалить 5 — удалить по ID\n\n" +
+         "Кнопки — в меню после /start";
+}
+
 // === Баланс ===
 async function getBalance() {
   const rows = await transactionsSheet.getRows();
@@ -124,7 +127,6 @@ async function getBalance() {
     balances[w] += sum;
   });
 
-  // Долги из отдельного листа
   const debtRows = await debtsSheet.getRows();
   let debtTotal = 0;
   debtRows.forEach(row => {
@@ -268,20 +270,56 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // Остальные команды (остаток, перевод, долги, свободный ввод) — добавь как в твоём Logic.gs
+  // Другие команды (остаток, перевод, удалить, долги, свободный ввод) — добавь как в твоём GAS-коде
 
-  ctx.reply("Не понял команду 😅\nНапиши /start для меню", mainKeyboard());
+  ctx.reply("Команда в разработке 😅\nНапиши /start для меню", mainKeyboard());
 });
 
 // === Обработка кнопок ===
-bot.action(/balance|report|debtors|menu|cancel_last/, async (ctx) => {
-  const data = ctx.match[0];
-  if (data === "balance") ctx.reply(await getBalanceText(), menuKeyboard());
-  else if (data === "report") ctx.reply(await getReport(), menuKeyboard());
-  else if (data === "debtors") ctx.reply(await getDebtorsText(), menuKeyboard());
-  else if (data === "menu") ctx.reply("Главное меню", mainKeyboard());
-  else if (data === "cancel_last") ctx.reply("Отмена — в разработке 😅");
+bot.action('balance', async (ctx) => {
   await ctx.answerCbQuery();
+  const balances = await getBalance();
+  let msg = "<b>Баланс по кошелькам:</b>\n\n";
+  const mainWallets = ["карта", "наличка", "депозит", "долги"];
+  let total = 0;
+  mainWallets.forEach(w => {
+    const bal = balances[w] || 0;
+    total += bal;
+    msg += `• ${w.charAt(0).toUpperCase() + w.slice(1)}: ${bal.toFixed(2)} ₽\n`;
+  });
+  msg += `\n• Евро: ${(balances["евро"] || 0).toFixed(2)} ₽\n`;
+  msg += `• Доллары: ${(balances["доллары"] || 0).toFixed(2)} ₽\n`;
+  msg += `\n<b>ИТОГ (основные):</b> ${total.toFixed(2)} ₽`;
+  ctx.reply(msg, menuKeyboard());
+});
+
+bot.action('report', async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.reply(await getReport(), menuKeyboard());
+});
+
+bot.action('debtors', async (ctx) => {
+  await ctx.answerCbQuery();
+  const list = await getDebtorsList();
+  if (list.length === 0) {
+    ctx.reply("Нет должников 😎", menuKeyboard());
+  } else {
+    let msg = "<b>Список должников:</b>\n\n";
+    list.forEach(d => {
+      msg += `• ${d.debtor}: ${d.amount.toFixed(2)} ₽\n`;
+    });
+    ctx.reply(msg, menuKeyboard());
+  }
+});
+
+bot.action('menu', async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.reply("Главное меню", mainKeyboard());
+});
+
+bot.action('cancel_last', async (ctx) => {
+  await ctx.answerCbQuery();
+  ctx.reply("Отмена последней — в разработке 😅");
 });
 
 bot.launch();
