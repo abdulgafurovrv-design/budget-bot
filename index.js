@@ -8,17 +8,31 @@ const bot = new Telegraf(TOKEN);
 const doc = new GoogleSpreadsheet(SHEET_ID);
 
 async function initDoc() {
-  // Новая авторизация для v4+
-  doc.useServiceAccountAuth = undefined; // не нужен
+  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
+  const key = process.env.GOOGLE_PRIVATE_KEY;
+
+  console.log('EMAIL:', email ? 'задан' : 'НЕ ЗАДАН');
+  console.log('KEY length:', key ? key.length : 'НЕ ЗАДАН');
+
+  if (!email || !key) {
+    console.error('Переменные GOOGLE_SERVICE_ACCOUNT_EMAIL или GOOGLE_PRIVATE_KEY не заданы');
+    return;
+  }
+
+  const fixedKey = key.replace(/\\n/g, '\n');
 
   await doc.useServiceAccountAuth({
-    client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+    client_email: email,
+    private_key: fixedKey,
   });
 
   await doc.loadInfo();
   console.log('Таблица подключена:', doc.title);
 }
+
+initDoc().catch(err => {
+  console.error('Ошибка авторизации:', err.message);
+});
 
 initDoc().catch(err => console.error('Ошибка подключения к таблице:', err));
 
