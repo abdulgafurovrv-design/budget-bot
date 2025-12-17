@@ -4,8 +4,9 @@ const { mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 
 async function getBalance() {
-  await transactionsSheet.loadInfo(); // ← обязательно перед getRows()
+  await transactionsSheet.resetLocalCache(); // ← это вместо loadInfo()
   const transRows = await transactionsSheet.getRows();
+
   const balances = {
     карта: 0,
     наличка: 0,
@@ -21,7 +22,7 @@ async function getBalance() {
     balances[wallet] += Number(row.get('Сумма')) || 0;
   });
 
-  await debtsSheet.loadInfo(); // ← и для долгов
+  await debtsSheet.resetLocalCache(); // ← и для долгов
   const debtRows = await debtsSheet.getRows();
   const debtTotal = debtRows.reduce((sum, row) => {
     const amount = Number(row.get('Сумма')) || 0;
