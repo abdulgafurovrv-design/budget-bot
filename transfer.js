@@ -34,8 +34,7 @@ async function handleTransfer(ctx) {
 
   const date = new Date().toLocaleString('ru-RU');
 
-  // Обновляем кэш перед чтением
-  await transactionsSheet.resetLocalCache();
+  await doc.loadInfo(); // ← перед getRows()
   const rows = await transactionsSheet.getRows();
 
   let maxId = 0;
@@ -44,7 +43,6 @@ async function handleTransfer(ctx) {
     if (id > maxId) maxId = id;
   });
 
-  // Расход
   await transactionsSheet.addRow({
     ID: maxId + 1,
     Дата: date,
@@ -55,7 +53,6 @@ async function handleTransfer(ctx) {
     Кошелёк: fromWallet
   });
 
-  // Доход
   await transactionsSheet.addRow({
     ID: maxId + 2,
     Дата: date,
