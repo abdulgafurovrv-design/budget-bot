@@ -1,10 +1,10 @@
 // balance.js
-const { transactionsSheet, debtsSheet, doc } = global; // ← добавили doc
+const { transactionsSheet, debtsSheet, doc } = global;
 const { mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 
 async function getBalance() {
-  await doc.loadInfo(); // ← перезагружаем метаданные документа
+  await doc.loadInfo();
   const transRows = await transactionsSheet.getRows();
 
   const balances = {
@@ -13,7 +13,8 @@ async function getBalance() {
     евро: 0,
     доллары: 0,
     депозит: 0,
-    долги: 0
+    долги: 0,
+    totalMain: 0
   };
 
   transRows.forEach(row => {
@@ -22,7 +23,7 @@ async function getBalance() {
     balances[wallet] += Number(row.get('Сумма')) || 0;
   });
 
-  await doc.loadInfo(); // ← для долгов тоже
+  await doc.loadInfo();
   const debtRows = await debtsSheet.getRows();
   const debtTotal = debtRows.reduce((sum, row) => {
     const amount = Number(row.get('Сумма')) || 0;
@@ -30,6 +31,8 @@ async function getBalance() {
   }, 0);
 
   balances.долги = debtTotal;
+  balances.totalMain = balances.карта + balances.наличка + balances.депозит + balances.долги;
+
   return balances;
 }
 
@@ -39,17 +42,14 @@ async function sendBalance(ctx) {
   let msg = '<b>Баланс по кошелькам:</b>\n\n';
 
   const mainWallets = ['карта', 'наличка', 'депозит', 'долги'];
-  let totalMain = 0;
-
   mainWallets.forEach(w => {
     const bal = balances[w] || 0;
-    totalMain += bal;
     msg += `• ${w.charAt(0).toUpperCase() + w.slice(1)}: ${bal.toFixed(2)} ₽\n`;
   });
 
   msg += `\n• Евро: ${balances.евро.toFixed(2)} ₽\n`;
   msg += `• Доллары: ${balances.доллары.toFixed(2)} ₽\n`;
-  msg += `\n<b>ИТОГ (основные):</b> ${totalMain.toFixed(2)} ₽`;
+  msg += `\n<b>ИТОГ (основные):</b> ${balances.totalMain.toFixed(2)} ₽`;
 
   const keyboard = ctx.callbackQuery ? menuKeyboard() : mainKeyboard();
   await ctx.replyWithHTML(msg, keyboard);
