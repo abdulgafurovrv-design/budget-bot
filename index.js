@@ -268,22 +268,30 @@ function parseFreeInput(text) {
     bot.command('баланс', sendBalance);
     bot.command('debtors', sendDebtors);
 
-    // Новая команда /остаток
-    bot.command('остаток', async (ctx) => {
-      const parts = ctx.message.text.trim().split(' ');
-      if (parts.length < 3) {
-        return ctx.reply('Формат: /остаток <кошелёк> <сумма>\nПример: /остаток карта 100000', menuKeyboard());
+        // Удаляем старый bot.command('остаток', ...) если он есть
+
+    // Новая обработка /остаток с аргументами
+    bot.hears(/^\/остаток\s+(.+)/i, async (ctx) => {
+      const args = ctx.match[1].trim().split(' ');
+      if (args.length < 2) {
+        return ctx.reply('Формат: /остаток <кошелёк> <сумма>\nПример: /остаток карта 150000', menuKeyboard());
       }
-      const wallet = normWallet(parts[1]);
-      const amount = parseFloat(parts[2]);
+
+      const walletRaw = args[0].toLowerCase();
+      const wallet = normWallet(walletRaw);
+      const amountStr = args[1].replace(',', '.'); // на случай запятой
+      const amount = parseFloat(amountStr);
+
       if (isNaN(amount) || amount < 0) {
-        return ctx.reply('Сумма должна быть положительной', menuKeyboard());
+        return ctx.reply('Сумма должна быть положительной цифрой', menuKeyboard());
       }
+
       if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(wallet)) {
         return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
       }
 
       await addTransaction('доход', amount, 'начальный остаток', '', wallet);
+
       const balances = await getBalance();
       await ctx.reply(`Начальный остаток установлен: ${amount.toFixed(2)} ₽ на #${wallet}\nТекущий баланс: ${balances[wallet].toFixed(2)} ₽`, menuKeyboard());
     });
