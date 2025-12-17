@@ -18,7 +18,7 @@ async function handleTransfer(ctx) {
     return ctx.reply('Сумма должна быть положительной цифрой', menuKeyboard());
   }
 
-  if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(fromWallet) || 
+  if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(fromWallet) ||
       !['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(toWallet)) {
     return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
   }
@@ -34,8 +34,8 @@ async function handleTransfer(ctx) {
 
   const date = new Date().toLocaleString('ru-RU');
 
-  // Перед getRows() — loadInfo()
-  await transactionsSheet.loadInfo();
+  // Обновляем кэш перед чтением
+  await transactionsSheet.resetLocalCache();
   const rows = await transactionsSheet.getRows();
 
   let maxId = 0;
@@ -44,7 +44,7 @@ async function handleTransfer(ctx) {
     if (id > maxId) maxId = id;
   });
 
-  // Расход с fromWallet
+  // Расход
   await transactionsSheet.addRow({
     ID: maxId + 1,
     Дата: date,
@@ -55,7 +55,7 @@ async function handleTransfer(ctx) {
     Кошелёк: fromWallet
   });
 
-  // Доход на toWallet
+  // Доход
   await transactionsSheet.addRow({
     ID: maxId + 2,
     Дата: date,
