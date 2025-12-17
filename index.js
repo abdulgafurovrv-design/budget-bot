@@ -97,6 +97,50 @@ async function sendBalance(ctx) {
   await ctx.replyWithHTML(msg, keyboard);
 }
 
+// === Список должников ===
+async function getDebtorsList() {
+  const debtRows = await debtsSheet.getRows();
+  const debtors = {};
+
+  debtRows.forEach(row => {
+    const debtor = row.get('Должник');
+    if (!debtor) return;
+    const amount = Number(row.get('Сумма')) || 0;
+    const normalizedDebtor = debtor.trim();
+    debtors[normalizedDebtor] = (debtors[normalizedDebtor] || 0) + amount;
+  });
+
+  // Фильтруем только положительные долги и сортируем по убыванию
+  const list = Object.entries(debtors)
+    .filter(([_, amount]) => amount > 0)
+    .map(([debtor, amount]) => ({ debtor, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  const total = list.reduce((sum, d) => sum + d.amount, 0);
+
+  return { list, total };
+}
+
+async function sendDebtors(ctx) {
+  const { list, total } = await getDebtorsList();
+
+  let msg;
+  if (list.length === 0) {
+    msg = 'Нет должников 😎';
+    await ctx.reply(msg, menuKeyboard());
+    return;
+  }
+
+  msg = '<b>Список должников:</b>\n\n';
+  list.forEach(d => {
+    msg += `• ${d.debtor}: ${d.amount.toFixed(2)} ₽\n`;
+  });
+  msg += `\n<b>Всего должны:</b> ${total.toFixed(2)} ₽`;
+
+  const keyboard = ctx.callbackQuery ? menuKeyboard() : mainKeyboard();
+  await ctx.replyWithHTML(msg, keyboard);
+}
+
 // === Приветствие ===
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
