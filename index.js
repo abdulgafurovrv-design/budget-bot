@@ -13,9 +13,9 @@ app.use(express.json());
 let transactionsSheet, debtsSheet;
 const DEFAULT_WALLET = 'карта';
 
-const lastOperations = new Map(); // chatId → { type: 'trans'|'debt', id }
+const lastOperations = new Map();
 
-// === Обновление кэша после изменений ===
+// === Обновление кэша ===
 async function reloadSheets() {
   await transactionsSheet.resetLocalCache();
   await debtsSheet.resetLocalCache();
@@ -74,10 +74,7 @@ async function getBalance() {
   });
 
   const debtRows = await debtsSheet.getRows();
-  const debtTotal = debtRows.reduce((sum, row) => {
-    const amount = Number(row.get('Сумма')) || 0;
-    return sum + (amount > 0 ? amount : 0);
-  }, 0);
+  const debtTotal = debtRows.reduce((sum, row) => sum + (Number(row.get('Сумма')) || 0 > 0 ? Number(row.get('Сумма')) || 0 : 0), 0);
 
   balances.долги = debtTotal;
   return balances;
@@ -155,7 +152,7 @@ function helpText() {
 Нажми кнопки 👇`;
 }
 
-// === Добавление записей (с обновлением кэша) ===
+// === Добавление записей ===
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   const date = new Date().toLocaleString('ru-RU');
   const sign = type === 'доход' ? amount : -amount;
@@ -167,7 +164,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
   const id = maxId + 1;
 
   await transactionsSheet.addRow({ ID: id, Дата: date, Тип: type, Сумма: sign, Категория: category, Комментарий: comment, Кошелёк: wallet });
-  await reloadSheets(); // ← обновляем кэш
+  await reloadSheets();
   return { id };
 }
 
@@ -181,11 +178,11 @@ async function addDebt(type, debtor, amount, comment = '') {
   const id = maxId + 1;
 
   await debtsSheet.addRow({ ID: id, Дата: date, Должник: debtor, Сумма: sign, Тип: type, Коммент: comment });
-  await reloadSheets(); // ← обновляем кэш
+  await reloadSheets();
   return { id };
 }
 
-// === Парсер свободного ввода (умный) ===
+// === Парсер свободного ввода ===
 function parseFreeInput(text) {
   const lower = text.toLowerCase();
 
@@ -272,14 +269,14 @@ function parseFreeInput(text) {
     bot.command('баланс', sendBalance);
     bot.command('debtors', sendDebtors);
 
-    // /остаток с аргументами
-    bot.hears(/^\/остаток\s+(.+)/i, async (ctx) => {
-      const args = ctx.match[1].trim().split(' ');
-      if (args.length < 2) {
+    // /остаток с ручной проверкой аргументов
+    bot.command('остаток', async (ctx) => {
+      const parts = ctx.message.text.trim().split(' ');
+      if (parts.length < 3) {
         return ctx.reply('Формат: /остаток <кошелёк> <сумма>\nПример: /остаток карта 150000', menuKeyboard());
       }
-      const wallet = normWallet(args[0]);
-      const amount = parseFloat(args[1].replace(',', '.'));
+      const wallet = normWallet(parts[1]);
+      const amount = parseFloat(parts[2].replace(',', '.'));
       if (isNaN(amount) || amount < 0) {
         return ctx.reply('Сумма должна быть положительной', menuKeyboard());
       }
