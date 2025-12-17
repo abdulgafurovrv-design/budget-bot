@@ -34,6 +34,17 @@ function helpText() {
 Нажми кнопки 👇`;
 }
 
+const { sendBalance } = require('./balance');
+const { handleInitial } = require('./initial');
+const { handleTransfer } = require('./transfer');
+
+// Команды и кнопки
+bot.command('баланс', sendBalance);
+bot.command('остаток', handleInitial);
+bot.command('перевод', handleTransfer);
+
+bot.action('balance', sendBalance);
+bot.action('transfer', (ctx) => ctx.reply('Используй команду /перевод от_кошелёк к_кошельку сумма\nПример: /перевод карта депозит 50000', menuKeyboard()));
 bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
 bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
 
