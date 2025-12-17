@@ -11,7 +11,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
   const sign = type === 'доход' ? amount : -amount;
   wallet = normWallet(wallet);
 
-  await transactionsSheet.loadInfo(); // ← обязательно перед getRows()
+  await transactionsSheet.resetLocalCache(); // ← перед getRows()
   const rows = await transactionsSheet.getRows();
   let maxId = 0;
   rows.forEach(r => {
@@ -30,10 +30,11 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
     Кошелёк: wallet
   });
 
-  // Кэш уже сброшен после addRow, но для следующего вызова getBalance он будет перезагружен
+  // После addRow кэш и так сбросится, но на всякий случай
+  await transactionsSheet.resetLocalCache();
+
   return { id };
 }
-
 function parseFreeInput(text) {
   const lower = text.toLowerCase();
 
