@@ -181,9 +181,9 @@ async function initSheets() {
       console.log(`Сервер запущен на порту ${PORT} и интерфейсе 0.0.0.0`);
 
       // Установка webhook (раскомментируй только на первом деплое после успеха)
-      // const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/bot${BOT_TOKEN}`;
-      // await bot.telegram.setWebhook(url);
-      // console.log('Webhook установлен:', url);
+      onst url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/bot${BOT_TOKEN}`;
+      await bot.telegram.setWebhook(url);
+      console.log('Webhook установлен:', url);
     });
 
   } catch (error) {
