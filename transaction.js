@@ -12,7 +12,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
     const sign = type === 'доход' ? amount : -amount;
     wallet = normWallet(wallet);
 
-    await doc.loadInfo(); // ← перед getRows()
+    await doc.loadInfo();
     const rows = await transactionsSheet.getRows();
 
     let maxId = 0;
@@ -32,14 +32,16 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
       Кошелёк: wallet
     });
 
+    console.log(`Транзакция добавлена: ${type} ${amount} ₽ на #${wallet}, категория: ${category}`);
     return { id, success: true };
   } catch (err) {
-    console.error('Ошибка добавления транзакции:', err);
-    return { success: false, error: 'Не удалось добавить запись в таблицу' };
+    console.error('Ошибка в addTransaction:', err);
+    return { success: false, error: err.message || 'Неизвестная ошибка' };
   }
 }
 
 function parseFreeInput(text) {
+  // Твой текущий парсер — оставляем как есть
   const lower = text.toLowerCase();
 
   if (lower.startsWith('дал ') || lower.startsWith('выдал ')) {
@@ -91,7 +93,6 @@ function parseFreeInput(text) {
 
   if (amountIndex === -1 || amount <= 0) return null;
 
-  // Улучшенное определение дохода
   const hasIncomeKeyword = /зарплат|зп|аванс|премия|кешбэк|подарок|возврат|доход/i.test(lower);
   const hasPlus = text.includes('+');
   const kind = hasPlus || hasIncomeKeyword ? 'доход' : 'расход';
@@ -104,43 +105,51 @@ function parseFreeInput(text) {
 }
 
 async function handleFreeInput(ctx) {
-  const text = ctx.message.text.trim();
-  const parsed = parseFreeInput(text);
+  try {
+    const text = ctx.message.text.trim();
+    console.log('Получено сообщение:', text);
 
-  if (!parsed) {
-    await ctx.reply('Не понял ввод 😅\nПримеры:\nкофе 250\n250 кофе #карта\nзарплата 100000\n+50000 премия', mainKeyboard());
-    return;
+    const parsed = parseFreeInput(text);
+    if (!parsed) {
+      console.log('Не распознан ввод');
+      await ctx.reply('Не понял ввод 😅\nПримеры:\nкофе 250\n250 кофе #карта\nзарплата 100000\n+50000 премия', mainKeyboard());
+      return;
+    }
+
+    console.log('Распознан ввод:', parsed);
+
+    if (parsed.action !== 'transaction') {
+      await ctx.reply('Работа с долгами в разработке 🚧', mainKeyboard());
+      return;
+    }
+
+    const chatId = ctx.chat.id;
+    const result = await addTransaction(parsed.kind, parsed.amount, parsed.category, '', parsed.wallet);
+
+    if (!result.success) {
+      await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
+      return;
+    }
+
+    const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
+    const balances = await getBalance();
+
+    const walletBalance = balances[parsed.wallet] || 0;
+    const totalMain = balances.карта + balances.наличка + balances.депозит + balances.долги;
+
+    const message = `Операция прошла успешно ✅\n\n` +
+      `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
+      `Кошелёк: #${parsed.wallet}\n\n` +
+      `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ₽\n` +
+      `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
+
+    lastOperations.set(chatId, { type: 'trans', id: result.id });
+
+    await ctx.reply(message, cancelLastKeyboard());
+  } catch (err) {
+    console.error('Ошибка в handleFreeInput:', err);
+    await ctx.reply('Произошла ошибка при обработке ввода 😔', mainKeyboard());
   }
-
-  // Обработка долгов (временно — если нужно, добавим позже)
-  if (parsed.action !== 'transaction') {
-    await ctx.reply('Работа с долгами в разработке 🚧', mainKeyboard());
-    return;
-  }
-
-  const chatId = ctx.chat.id;
-  const result = await addTransaction(parsed.kind, parsed.amount, parsed.category, '', parsed.wallet);
-
-  if (!result.success) {
-    await ctx.reply(`Ошибка операции ❌\n${result.error}`, mainKeyboard());
-    return;
-  }
-
-  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
-  const balances = await getBalance();
-
-  const walletBalance = balances[parsed.wallet] || 0;
-  const totalMain = balances.карта + balances.наличка + balances.депозит + balances.долги;
-
-  const message = `Операция прошла успешно ✅\n\n` +
-    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
-    `Кошелёк: #${parsed.wallet}\n\n` +
-    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ₽\n` +
-    `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
-
-  lastOperations.set(chatId, { type: 'trans', id: result.id });
-
-  await ctx.reply(message, cancelLastKeyboard());
 }
 
 module.exports = { handleFreeInput, addTransaction, lastOperations };
