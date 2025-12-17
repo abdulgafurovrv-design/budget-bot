@@ -14,6 +14,8 @@ require('./utils');
 // === Инициализация Google Sheets (асинхронная) ===
 const initSheets = require('./sheets'); // sheets.js экспортирует промис или функцию
 
+const { handleFreeInput } = require('./transaction');
+
 // === Приветствие ===
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
@@ -65,6 +67,9 @@ function helpText() {
       await ctx.answerCbQuery('В разработке 🚧');
     });
 
+   // Свободный ввод расходов и доходов
+bot.on('text', handleFreeInput);
+    
     bot.catch((err) => console.error('Bot error:', err));
 
     // Webhook
