@@ -12,7 +12,6 @@ app.use(express.json());
 // Глобальные переменные для листов
 let transactionsSheet, debtsSheet;
 
-const WALLETS = ['карта', 'наличка', 'евро', 'доллары', 'депозит', 'долги'];
 const DEFAULT_WALLET = 'карта';
 
 // === Клавиатуры ===
@@ -51,9 +50,7 @@ function normWallet(w) {
 // === Баланс ===
 async function getBalance() {
   const transRows = await transactionsSheet.getRows();
-  const balances = {
-    карта: 0, наличка: 0, евро: 0, доллары: 0, депозит: 0, долги: 0
-  };
+  const balances = { карта: 0, наличка: 0, евро: 0, доллары: 0, депозит: 0, долги: 0 };
 
   transRows.forEach(row => {
     const wallet = normWallet(row.get('Кошелёк') || DEFAULT_WALLET);
@@ -61,7 +58,6 @@ async function getBalance() {
     balances[wallet] += Number(row.get('Сумма')) || 0;
   });
 
-  // Долги — только положительные суммы
   const debtRows = await debtsSheet.getRows();
   const debtTotal = debtRows.reduce((sum, row) => {
     const amount = Number(row.get('Сумма')) || 0;
@@ -86,9 +82,8 @@ async function sendBalance(ctx) {
     msg += `• ${w.charAt(0).toUpperCase() + w.slice(1)}: ${bal.toFixed(2)} ₽\n`;
   });
 
-  msg += `\n• Евро: ${balances.ево.toFixed(2)} ₽\n`;
+  msg += `\n• Евро: ${balances.евро.toFixed(2)} ₽\n`;
   msg += `• Доллары: ${balances.доллары.toFixed(2)} ₽\n`;
-
   msg += `\n<b>ИТОГ (основные):</b> ${total.toFixed(2)} ₽`;
 
   const keyboard = ctx.callbackQuery ? menuKeyboard() : mainKeyboard();
@@ -121,94 +116,70 @@ function helpText() {
 // === Инициализация Google Sheets ===
 async function initSheets() {
   const doc = new GoogleSpreadsheet(SHEET_ID);
-
   await doc.useServiceAccountAuth({
     client_email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
     private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   });
-
   await doc.loadInfo();
 
-  // Transactions
   let sheet = doc.sheetsByTitle['Transactions'];
-  if (!sheet) {
-    sheet = await doc.addSheet({
-      title: 'Transactions',
-      headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']
-    });
-  }
+  if (!sheet) sheet = await doc.addSheet({ title: 'Transactions', headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк'] });
   transactionsSheet = sheet;
 
-  // Debts
   sheet = doc.sheetsByTitle['Debts'];
-  if (!sheet) {
-    sheet = await doc.addSheet({
-      title: 'Debts',
-      headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']
-    });
-  }
+  if (!sheet) sheet = await doc.addSheet({ title: 'Debts', headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент'] });
   debtsSheet = sheet;
 
   console.log('Google Sheets инициализированы');
 }
 
-// === Запуск бота ===
+// === Запуск ===
 (async () => {
   try {
     await initSheets();
 
-    // Команды
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.command('баланс', sendBalance);
 
-    // Обработка callback-кнопок
     bot.action('balance', sendBalance);
     bot.action('menu', async (ctx) => {
-      await ctx.editMessageText('Главное меню', mainKeyboard());
+      await ctx.editMessageText('Главное меню', { reply_markup: mainKeyboard().reply_markup });
       await ctx.answerCbQuery();
     });
 
-    // Заглушки для остальных кнопок (пока не реализованы)
+    // Заглушки
     bot.action(['report', 'debtors', 'transfer', 'expense', 'income', 'cancel_last'], async (ctx) => {
-      await ctx.answerCbQuery('Функция в разработке 🚧');
+      await ctx.answerCbQuery('В разработке 🚧');
     });
 
-    // Ловим все текстовые сообщения (для будущего свободного ввода)
     bot.on('text', async (ctx) => {
       const text = ctx.message.text.trim();
       if (text.startsWith('/')) {
-        if (!['/start', '/help', '/баланс'].includes(text)) {
-          await ctx.reply('Команда в разработке 🚧', mainKeyboard());
-        }
+        await ctx.reply('Команда в разработке 🚧', mainKeyboard());
       } else {
-        await ctx.reply('Свободный ввод скоро будет работать 😎', mainKeyboard());
+        await ctx.reply('Свободный ввод скоро заработает 😎', mainKeyboard());
       }
     });
 
-    // Обработка ошибок
-    bot.catch((err, ctx) => {
-      console.error('Ошибка бота:', err);
-      ctx.reply('Произошла ошибка 😔').catch(() => {});
-    });
+    bot.catch((err) => console.error('Bot error:', err));
 
-    // Webhook роут
-    app.post(`/bot${BOT_TOKEN}`, bot.webhookCallback());
+    // Webhook
+    app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
 
-    // Главная страница (для проверки)
     app.get('/', (req, res) => res.send('Бюджет-бот жив! 🚀'));
 
     const PORT = process.env.PORT || 3000;
-    app.listen(PORT, async () => {
-      console.log(`Сервер запущен на порту ${PORT}`);
+    app.listen(PORT, '0.0.0.0', async () => {
+      console.log(`Сервер запущен на порту ${PORT} и интерфейсе 0.0.0.0`);
 
-      // Установка webhook (закомментируй после первого успешного деплоя)
-      const url = `https://${process.env.RENDER_SERVICE_NAME || 'your-service-name'}.onrender.com/bot${BOT_TOKEN}`;
-      await bot.telegram.setWebhook(url);
-      console.log('Webhook установлен:', url);
+      // Установка webhook — раскомментируй только на первом деплое!
+      // const url = `https://${process.env.RENDER_EXTERNAL_HOSTNAME}/bot${BOT_TOKEN}`;
+      // await bot.telegram.setWebhook(url);
+      // console.log('Webhook установлен:', url);
     });
 
   } catch (error) {
-    console.error('Критическая ошибка при запуске:', error);
+    console.error('Критическая ошибка:', error);
   }
 })();
