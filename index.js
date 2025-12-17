@@ -44,7 +44,7 @@ function helpText() {
     const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
     await doc.loadInfo();
 
-       // Transactions
+         // Transactions
     let sheet = doc.sheetsByTitle['Transactions'];
     if (!sheet) {
       sheet = await doc.addSheet({
@@ -52,13 +52,49 @@ function helpText() {
         headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']
       });
     } else {
-      await sheet.loadHeaderRow(); // ← обязательно!
-      const headers = sheet.headerValues;
-      if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
-        await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
+      try {
+        await sheet.loadHeaderRow(); // пытаемся загрузить заголовки
+        const headers = sheet.headerValues;
+        if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
+          await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
+          await reloadSheets(); // обновляем кэш после изменения
+        }
+      } catch (err) {
+        if (err.message.includes('No values in the header row')) {
+          await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
+          await reloadSheets();
+        } else {
+          throw err; // если другая ошибка — пробрасываем
+        }
       }
     }
     transactionsSheet = sheet;
+
+    // Debts
+    sheet = doc.sheetsByTitle['Debts'];
+    if (!sheet) {
+      sheet = await doc.addSheet({
+        title: 'Debts',
+        headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']
+      });
+    } else {
+      try {
+        await sheet.loadHeaderRow();
+        const headers = sheet.headerValues;
+        if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
+          await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
+          await reloadSheets();
+        }
+      } catch (err) {
+        if (err.message.includes('No values in the header row')) {
+          await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
+          await reloadSheets();
+        } else {
+          throw err;
+        }
+      }
+    }
+    debtsSheet = sheet;
 
     // Debts
     sheet = doc.sheetsByTitle['Debts'];
