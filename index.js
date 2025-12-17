@@ -140,20 +140,17 @@ async function sendDebtors(ctx) {
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
 
-Работаю мгновенно!
-
-<b>Готово:</b>
-• Свободный ввод
+Готово:
+• Свободный ввод (кофе 240, 240 кофе #наличка, +15000 зп)
 • Отмена последней
 • Баланс
 • Должники
-
-Скоро: отчёт, переводы и остатки.
+• /остаток — начальный остаток
 
 Нажми кнопки 👇`;
 }
 
-// === Добавление транзакции и долга ===
+// === Добавление записей ===
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   const date = new Date().toLocaleString('ru-RU');
   const sign = type === 'доход' ? amount : -amount;
@@ -181,11 +178,66 @@ async function addDebt(type, debtor, amount, comment = '') {
   return { id };
 }
 
-// === Парсер ===
+// === Улучшенный парсер свободного ввода ===
 function parseFreeInput(text) {
-  // ... (оставляем тот же парсер, что был раньше — он работает)
-  // Если нужно — могу повторить, но он уже есть в твоём коде
-  // (чтобы не удлинять — предполагаем, что он остался)
+  const lower = text.toLowerCase();
+
+  // Долги
+  if (lower.startsWith('дал ') || lower.startsWith('выдал ')) {
+    const parts = text.split(' ');
+    if (parts.length < 3) return null;
+    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+    const amount = parseFloat(parts[2]);
+    const comment = parts.slice(3).join(' ');
+    if (isNaN(amount) || amount <= 0) return null;
+    return { action: 'lend', debtor, amount, comment };
+  }
+
+  if (lower.startsWith('вернули ') || lower.startsWith('вернул ')) {
+    const parts = text.split(' ');
+    if (parts.length < 3) return null;
+    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+    const amount = parseFloat(parts[2]);
+    const comment = parts.slice(3).join(' ');
+    if (isNaN(amount) || amount <= 0) return null;
+    return { action: 'return_debt', debtor, amount, comment };
+  }
+
+  if (lower.startsWith('добавить долг ')) {
+    const rest = text.slice(13).trim();
+    const words = rest.split(' ');
+    let amount = 0, amountIndex = -1;
+    for (let i = 0; i < words.length; i++) {
+      amount = parseFloat(words[i]);
+      if (!isNaN(amount) && amount > 0) { amountIndex = i; break; }
+    }
+    if (amountIndex === -1 || amount <= 0 || amountIndex === 0) return null;
+    const debtor = words.slice(0, amountIndex).join(' ').replace(/^\w/, c => c.toUpperCase());
+    const comment = words.slice(amountIndex + 1).join(' ');
+    return { action: 'opening_debt', debtor, amount, comment };
+  }
+
+  // Транзакции — число где угодно
+  const { wallet, cleaned } = extractWallet(text);
+  const words = cleaned.trim().split(/\s+/);
+
+  let amount = 0, amountIndex = -1;
+  for (let i = 0; i < words.length; i++) {
+    let numStr = words[i].replace('+', '');
+    amount = parseFloat(numStr);
+    if (!isNaN(amount) && amount > 0) { amountIndex = i; break; }
+  }
+
+  if (amountIndex === -1 || amount <= 0) return null;
+
+  const hasPlus = text.includes('+') || /зарплат|зп|аванс|кешбэк|подарок|премия|возврат/i.test(lower);
+  const kind = hasPlus ? 'доход' : 'расход';
+
+  const categoryWords = [...words];
+  categoryWords.splice(amountIndex, 1);
+  const category = categoryWords.join(' ').trim() || 'разное';
+
+  return { action: 'transaction', kind, amount, category, wallet };
 }
 
 // === Запуск ===
@@ -210,11 +262,33 @@ function parseFreeInput(text) {
 
     console.log('Google Sheets подключены');
 
+    // Команды
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.command('баланс', sendBalance);
     bot.command('debtors', sendDebtors);
 
+    // Новая команда /остаток
+    bot.command('остаток', async (ctx) => {
+      const parts = ctx.message.text.trim().split(' ');
+      if (parts.length < 3) {
+        return ctx.reply('Формат: /остаток <кошелёк> <сумма>\nПример: /остаток карта 100000', menuKeyboard());
+      }
+      const wallet = normWallet(parts[1]);
+      const amount = parseFloat(parts[2]);
+      if (isNaN(amount) || amount < 0) {
+        return ctx.reply('Сумма должна быть положительной', menuKeyboard());
+      }
+      if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(wallet)) {
+        return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
+      }
+
+      await addTransaction('доход', amount, 'начальный остаток', '', wallet);
+      const balances = await getBalance();
+      await ctx.reply(`Начальный остаток установлен: ${amount.toFixed(2)} ₽ на #${wallet}\nТекущий баланс: ${balances[wallet].toFixed(2)} ₽`, menuKeyboard());
+    });
+
+    // Кнопки
     bot.action('balance', sendBalance);
     bot.action('debtors', sendDebtors);
     bot.action('menu', async (ctx) => {
@@ -223,10 +297,68 @@ function parseFreeInput(text) {
     });
 
     bot.action('cancel_last', async (ctx) => {
-      // ... (код отмены из предыдущего сообщения)
+      await ctx.answerCbQuery();
+      const chatId = ctx.chat.id;
+      const lastOp = lastOperations.get(chatId);
+      if (!lastOp) return ctx.reply('Нет операций для отмены 😅', menuKeyboard());
+
+      let deleted = false;
+      if (lastOp.type === 'trans') {
+        const rows = await transactionsSheet.getRows();
+        const row = rows.find(r => Number(r.get('ID')) === lastOp.id);
+        if (row) { await row.delete(); deleted = true; }
+      } else if (lastOp.type === 'debt') {
+        const rows = await debtsSheet.getRows();
+        const row = rows.find(r => Number(r.get('ID')) === lastOp.id);
+        if (row) { await row.delete(); deleted = true; }
+      }
+
+      if (deleted) {
+        lastOperations.delete(chatId);
+        await ctx.reply('Последняя операция отменена ✅', menuKeyboard());
+      } else {
+        await ctx.reply('Не удалось найти запись', menuKeyboard());
+      }
     });
 
-    // Остальные заглушки и свободный ввод — как было
+    // Заглушки для остальных кнопок
+    bot.action(['report', 'transfer', 'expense', 'income'], async (ctx) => {
+      await ctx.answerCbQuery('В разработке 🚧');
+    });
+
+    // Свободный ввод
+    bot.on('text', async (ctx) => {
+      const text = ctx.message.text.trim();
+      if (text.startsWith('/')) return;
+
+      const parsed = parseFreeInput(text);
+      if (!parsed) {
+        return ctx.reply('Не понял 😅\nПримеры:\nкофе 240\n240 кофе #карта\n+15000 зп\nдал Иван 5000', mainKeyboard());
+      }
+
+      const chatId = ctx.chat.id;
+      let message;
+
+      if (parsed.action === 'transaction') {
+        const result = await addTransaction(parsed.kind, parsed.amount, parsed.category, '', parsed.wallet);
+        const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
+        const balances = await getBalance();
+        message = `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\nКошелёк: #${parsed.wallet}\nБаланс: ${balances[parsed.wallet].toFixed(2)} ₽`;
+        lastOperations.set(chatId, { type: 'trans', id: result.id });
+      } else {
+        let result;
+        if (parsed.action === 'lend') result = await addDebt('issue', parsed.debtor, parsed.amount, parsed.comment);
+        if (parsed.action === 'return_debt') result = await addDebt('return', parsed.debtor, parsed.amount, parsed.comment);
+        if (parsed.action === 'opening_debt') result = await addDebt('opening', parsed.debtor, parsed.amount, parsed.comment);
+
+        const balances = await getBalance();
+        const actionText = parsed.action === 'lend' ? 'Выдал долг' : parsed.action === 'return_debt' ? 'Возврат от' : 'Добавлен долг от';
+        message = `${actionText} ${parsed.debtor}: ${parsed.amount.toFixed(2)} ₽${parsed.comment ? ' (' + parsed.comment + ')' : ''}\nБаланс долгов: ${balances.долги.toFixed(2)} ₽`;
+        lastOperations.set(chatId, { type: 'debt', id: result.id });
+      }
+
+      await ctx.reply(message, cancelLastKeyboard());
+    });
 
     bot.catch((err) => console.error('Bot error:', err));
 
