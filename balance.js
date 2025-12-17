@@ -30,6 +30,7 @@ async function getBalance() {
   return balances;
 }
 
+// balance.js — исправленный sendBalance
 async function sendBalance(ctx) {
   const balances = await getBalance();
 
@@ -40,7 +41,7 @@ async function sendBalance(ctx) {
 
   mainWallets.forEach(w => {
     const bal = balances[w] || 0;
-    if (w !== 'долги') totalMain += bal;
+    totalMain += bal;  // ← теперь долги тоже входят в итог
     msg += `• ${w.charAt(0).toUpperCase() + w.slice(1)}: ${bal.toFixed(2)} ₽\n`;
   });
 
