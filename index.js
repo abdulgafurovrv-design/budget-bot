@@ -10,8 +10,6 @@ const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use(express.json());
 
-let transactionsSheet, debtsSheet;
-
 // === Клавиатуры ===
 function mainKeyboard() {
   return Markup.inlineKeyboard([
@@ -25,14 +23,14 @@ function mainKeyboard() {
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
 
-Бот запущен в базовом режиме.
+Базовая версия запущена.
 
-Скоро добавим весь функционал по шагам.
+Функционал добавляем по шагам.
 
-Нажми кнопки ниже 👇`;
+Нажми кнопки 👇`;
 }
 
-// === Инициализация Google Sheets с правильной проверкой заголовков ===
+// === Запуск ===
 (async () => {
   try {
     const serviceAccountAuth = new JWT({
@@ -43,8 +41,9 @@ function helpText() {
 
     const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
     await doc.loadInfo();
+    console.log('Таблица подключена:', doc.title);
 
-         // Transactions
+    // Transactions — создаём или исправляем заголовки
     let sheet = doc.sheetsByTitle['Transactions'];
     if (!sheet) {
       sheet = await doc.addSheet({
@@ -53,24 +52,14 @@ function helpText() {
       });
     } else {
       try {
-        await sheet.loadHeaderRow(); // пытаемся загрузить заголовки
-        const headers = sheet.headerValues;
-        if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
-          await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
-          await reloadSheets(); // обновляем кэш после изменения
-        }
+        await sheet.loadHeaderRow();
       } catch (err) {
-        if (err.message.includes('No values in the header row')) {
-          await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
-          await reloadSheets();
-        } else {
-          throw err; // если другая ошибка — пробрасываем
-        }
+        // Если заголовков нет — устанавливаем
+        await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
       }
     }
-    transactionsSheet = sheet;
 
-    // Debts
+    // Debts — то же самое
     sheet = doc.sheetsByTitle['Debts'];
     if (!sheet) {
       sheet = await doc.addSheet({
@@ -80,60 +69,18 @@ function helpText() {
     } else {
       try {
         await sheet.loadHeaderRow();
-        const headers = sheet.headerValues;
-        if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
-          await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
-          await reloadSheets();
-        }
       } catch (err) {
-        if (err.message.includes('No values in the header row')) {
-          await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
-          await reloadSheets();
-        } else {
-          throw err;
-        }
-      }
-    }
-    debtsSheet = sheet;
-
-    // Debts
-    sheet = doc.sheetsByTitle['Debts'];
-    if (!sheet) {
-      sheet = await doc.addSheet({
-        title: 'Debts',
-        headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']
-      });
-    } else {
-      await sheet.loadHeaderRow(); // ← обязательно!
-      const headers = sheet.headerValues;
-      if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
         await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
       }
     }
-    debtsSheet = sheet;
 
-    // Debts
-    sheet = doc.sheetsByTitle['Debts'];
-    if (!sheet) {
-      sheet = await doc.addSheet({
-        title: 'Debts',
-        headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']
-      });
-    } else {
-      const headers = await sheet.headerValues;
-      if (!headers || headers.length === 0 || headers.every(h => !h || h.trim() === '')) {
-        await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
-      }
-    }
-    debtsSheet = sheet;
+    console.log('Листы готовы, заголовки установлены');
 
-    console.log('Google Sheets подключены, заголовки проверены');
-
-    // Только /start и меню
+    // Только /start
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 
-    // Заглушки для всех кнопок
+    // Заглушки для кнопок
     bot.action(['balance', 'report', 'debtors', 'transfer', 'expense', 'income'], async (ctx) => {
       await ctx.answerCbQuery('Функция в разработке 🚧');
     });
@@ -142,7 +89,7 @@ function helpText() {
 
     // Webhook
     app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
-    app.get('/', (req, res) => res.send('Бюджет-бот жив (базовая версия)! 🚀'));
+    app.get('/', (req, res) => res.send('Бюджет-бот базовая версия жив! 🚀'));
 
     const PORT = process.env.PORT || 3000;
     app.listen(PORT, '0.0.0.0', () => {
