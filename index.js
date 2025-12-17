@@ -257,12 +257,27 @@ function parseFreeInput(text) {
     const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
     await doc.loadInfo();
 
-    let sheet = doc.sheetsByTitle['Transactions'];
-    if (!sheet) sheet = await doc.addSheet({ title: 'Transactions', headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк'] });
+        let sheet = doc.sheetsByTitle['Transactions'];
+    if (!sheet) {
+      sheet = await doc.addSheet({ title: 'Transactions', headerValues: ['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк'] });
+    } else {
+      // Проверяем, есть ли заголовки
+      const headerRow = await sheet.getHeaderRow();
+      if (!headerRow || headerRow.length === 0) {
+        await sheet.setHeaderRow(['ID', 'Дата', 'Тип', 'Сумма', 'Категория', 'Комментарий', 'Кошелёк']);
+      }
+    }
     transactionsSheet = sheet;
 
     sheet = doc.sheetsByTitle['Debts'];
-    if (!sheet) sheet = await doc.addSheet({ title: 'Debts', headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент'] });
+    if (!sheet) {
+      sheet = await doc.addSheet({ title: 'Debts', headerValues: ['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент'] });
+    } else {
+      const headerRow = await sheet.getHeaderRow();
+      if (!headerRow || headerRow.length === 0) {
+        await sheet.setHeaderRow(['ID', 'Дата', 'Должник', 'Сумма', 'Тип', 'Коммент']);
+      }
+    }
     debtsSheet = sheet;
 
     console.log('Google Sheets подключены');
