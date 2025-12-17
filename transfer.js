@@ -1,5 +1,5 @@
 // transfer.js
-const { transactionsSheet } = global;
+const { transactionsSheet, doc } = global; // ← добавили doc
 const { menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 const { getBalance } = require('./balance');
