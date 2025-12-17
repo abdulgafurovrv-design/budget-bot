@@ -15,6 +15,12 @@ const DEFAULT_WALLET = 'карта';
 
 const lastOperations = new Map(); // chatId → { type: 'trans'|'debt', id }
 
+// === Обновление кэша после изменений ===
+async function reloadSheets() {
+  await transactionsSheet.resetLocalCache();
+  await debtsSheet.resetLocalCache();
+}
+
 // === Клавиатуры ===
 function mainKeyboard() {
   return Markup.inlineKeyboard([
@@ -141,16 +147,15 @@ function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
 
 Готово:
-• Свободный ввод (кофе 240, 240 кофе #наличка, +15000 зп)
+• Свободный ввод (кофе 240, 240 кофе, #кошелёк)
 • Отмена последней
-• Баланс
-• Должники
+• Баланс, Должники
 • /остаток — начальный остаток
 
 Нажми кнопки 👇`;
 }
 
-// === Добавление записей ===
+// === Добавление записей (с обновлением кэша) ===
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   const date = new Date().toLocaleString('ru-RU');
   const sign = type === 'доход' ? amount : -amount;
@@ -162,6 +167,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
   const id = maxId + 1;
 
   await transactionsSheet.addRow({ ID: id, Дата: date, Тип: type, Сумма: sign, Категория: category, Комментарий: comment, Кошелёк: wallet });
+  await reloadSheets(); // ← обновляем кэш
   return { id };
 }
 
@@ -175,14 +181,14 @@ async function addDebt(type, debtor, amount, comment = '') {
   const id = maxId + 1;
 
   await debtsSheet.addRow({ ID: id, Дата: date, Должник: debtor, Сумма: sign, Тип: type, Коммент: comment });
+  await reloadSheets(); // ← обновляем кэш
   return { id };
 }
 
-// === Улучшенный парсер свободного ввода ===
+// === Парсер свободного ввода (умный) ===
 function parseFreeInput(text) {
   const lower = text.toLowerCase();
 
-  // Долги
   if (lower.startsWith('дал ') || lower.startsWith('выдал ')) {
     const parts = text.split(' ');
     if (parts.length < 3) return null;
@@ -217,7 +223,6 @@ function parseFreeInput(text) {
     return { action: 'opening_debt', debtor, amount, comment };
   }
 
-  // Транзакции — число где угодно
   const { wallet, cleaned } = extractWallet(text);
   const words = cleaned.trim().split(/\s+/);
 
@@ -262,41 +267,31 @@ function parseFreeInput(text) {
 
     console.log('Google Sheets подключены');
 
-    // Команды
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.command('баланс', sendBalance);
     bot.command('debtors', sendDebtors);
 
-        // Удаляем старый bot.command('остаток', ...) если он есть
-
-    // Новая обработка /остаток с аргументами
+    // /остаток с аргументами
     bot.hears(/^\/остаток\s+(.+)/i, async (ctx) => {
       const args = ctx.match[1].trim().split(' ');
       if (args.length < 2) {
         return ctx.reply('Формат: /остаток <кошелёк> <сумма>\nПример: /остаток карта 150000', menuKeyboard());
       }
-
-      const walletRaw = args[0].toLowerCase();
-      const wallet = normWallet(walletRaw);
-      const amountStr = args[1].replace(',', '.'); // на случай запятой
-      const amount = parseFloat(amountStr);
-
+      const wallet = normWallet(args[0]);
+      const amount = parseFloat(args[1].replace(',', '.'));
       if (isNaN(amount) || amount < 0) {
-        return ctx.reply('Сумма должна быть положительной цифрой', menuKeyboard());
+        return ctx.reply('Сумма должна быть положительной', menuKeyboard());
       }
-
       if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(wallet)) {
         return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
       }
 
       await addTransaction('доход', amount, 'начальный остаток', '', wallet);
-
       const balances = await getBalance();
       await ctx.reply(`Начальный остаток установлен: ${amount.toFixed(2)} ₽ на #${wallet}\nТекущий баланс: ${balances[wallet].toFixed(2)} ₽`, menuKeyboard());
     });
 
-    // Кнопки
     bot.action('balance', sendBalance);
     bot.action('debtors', sendDebtors);
     bot.action('menu', async (ctx) => {
@@ -314,11 +309,11 @@ function parseFreeInput(text) {
       if (lastOp.type === 'trans') {
         const rows = await transactionsSheet.getRows();
         const row = rows.find(r => Number(r.get('ID')) === lastOp.id);
-        if (row) { await row.delete(); deleted = true; }
+        if (row) { await row.delete(); deleted = true; await reloadSheets(); }
       } else if (lastOp.type === 'debt') {
         const rows = await debtsSheet.getRows();
         const row = rows.find(r => Number(r.get('ID')) === lastOp.id);
-        if (row) { await row.delete(); deleted = true; }
+        if (row) { await row.delete(); deleted = true; await reloadSheets(); }
       }
 
       if (deleted) {
@@ -329,7 +324,6 @@ function parseFreeInput(text) {
       }
     });
 
-    // Заглушки для остальных кнопок
     bot.action(['report', 'transfer', 'expense', 'income'], async (ctx) => {
       await ctx.answerCbQuery('В разработке 🚧');
     });
