@@ -7,70 +7,68 @@ const bot = new Telegraf(BOT_TOKEN);
 const app = express();
 app.use(express.json());
 
-// Подключаем клавиатуры и утилиты (синхронные)
-require('./keyboards');
-require('./utils');
+// === 1. Сначала инициализируем Google Sheets (асинхронно) ===
+const initSheets = require('./sheets'); // sheets.js возвращает промис
 
-// === Инициализация Google Sheets (асинхронная) ===
-const initSheets = require('./sheets'); // sheets.js экспортирует промис или функцию
-
-const { handleFreeInput } = require('./transaction');
+// === 2. Клавиатуры и утилиты (синхронные) ===
+const { mainKeyboard, menuKeyboard, cancelLastKeyboard } = require('./keyboards');
+const { normWallet } = require('./utils');
 
 // === Приветствие ===
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
 
 Доступно:
-• Баланс (кнопка или /баланс)
-• Начальный остаток (/остаток кошелёк сумма)
-• Перевод (/перевод от_кошелька к_кошельку сумма)
+• Баланс
+• Начальный остаток (/остаток)
+• Перевод (/перевод)
+• Свободный ввод расходов и доходов
 
 Нажми кнопки 👇`;
 }
 
-// Запуск после полной инициализации
+// === Запуск после инициализации Sheets ===
 (async () => {
   try {
-    await initSheets; // ждём, пока sheets.js завершит инициализацию
+    await initSheets; // ЖДЁМ, пока таблицы полностью инициализированы
+    console.log('Sheets инициализированы, подключаем модули функционала');
 
-    console.log('Все модули инициализированы');
-
-    // Теперь подключаем функционал (когда таблицы уже готовы)
+    // === 3. Теперь подключаем модули, зависящие от global.transactionsSheet ===
     const { sendBalance } = require('./balance');
     const { handleInitial } = require('./initial');
     const { handleTransfer } = require('./transfer');
+    const { handleFreeInput } = require('./transaction');
 
-       // Команды
-    bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
-    bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
+    // === Команды и обработчики ===
+    bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
+    bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 
     bot.command('баланс', sendBalance);
+    bot.command('остаток', handleInitial);
+    bot.command('перевод', handleTransfer);
 
-    // Команды с аргументами — через hears
-    bot.hears(/^\/остаток\s+/i, handleInitial);
-    bot.hears(/^\/перевод\s+/i, handleTransfer);
-
-    // Кнопки
     bot.action('balance', sendBalance);
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
-      await ctx.reply('Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', require('./keyboards').menuKeyboard());
+      await ctx.reply('Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', menuKeyboard());
     });
 
     bot.action('menu', async (ctx) => {
-      await ctx.editMessageText(helpText(), { reply_markup: require('./keyboards').mainKeyboard().reply_markup });
+      await ctx.editMessageText(helpText(), { reply_markup: mainKeyboard().reply_markup });
       await ctx.answerCbQuery();
     });
 
     // Заглушки
-    bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
+    bot.action(['report', 'debtors', 'expense', 'income', 'cancel_last'], async (ctx) => {
       await ctx.answerCbQuery('В разработке 🚧');
     });
 
-   // Свободный ввод расходов и доходов
-bot.on('text', handleFreeInput);
-    
-    bot.catch((err) => console.error('Bot error:', err));
+    // Свободный ввод
+    bot.on('text', handleFreeInput);
+
+    bot.catch((err) => {
+      console.error('Bot error:', err);
+    });
 
     // Webhook
     app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
@@ -82,6 +80,6 @@ bot.on('text', handleFreeInput);
     });
 
   } catch (error) {
-    console.error('Ошибка при запуске:', error);
+    console.error('Критическая ошибка запуска:', error);
   }
 })();
