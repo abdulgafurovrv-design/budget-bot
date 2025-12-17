@@ -23,8 +23,8 @@ async function handleInitial(ctx) {
 
   const date = new Date().toLocaleString('ru-RU');
 
-  // Перед getRows() — обязательно loadInfo()
-  await transactionsSheet.loadInfo();
+  // Обновляем кэш перед чтением строк
+  await transactionsSheet.resetLocalCache();
   const rows = await transactionsSheet.getRows();
 
   let maxId = 0;
