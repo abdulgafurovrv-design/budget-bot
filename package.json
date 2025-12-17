@@ -1,12 +1,17 @@
 {
   "name": "budget-bot",
   "version": "1.0.0",
+  "description": "Бюджет-бот на Telegraf с Google Sheets",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "telegraf": "^4.16.3",
-    "google-spreadsheet": "^3.3.0"
+    "google-spreadsheet": "^4.1.3",
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
