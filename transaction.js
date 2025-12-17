@@ -1,17 +1,14 @@
 // transaction.js
-const { transactionsSheet } = global;
-const { cancelLastKeyboard, mainKeyboard } = require('./keyboards');
-const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
-const { getBalance } = require('./balance');
-
-const lastOperations = new Map(); // chatId → { type: 'trans', id }
+// transaction.js
+const { transactionsSheet, doc } = global; // ← добавляем doc
+// ... остальное
 
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   const date = new Date().toLocaleString('ru-RU');
   const sign = type === 'доход' ? amount : -amount;
   wallet = normWallet(wallet);
 
-  await transactionsSheet.resetLocalCache(); // ← перед getRows()
+  await doc.loadInfo(); // ← перед getRows()
   const rows = await transactionsSheet.getRows();
   let maxId = 0;
   rows.forEach(r => {
@@ -29,6 +26,9 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
     Комментарий: comment,
     Кошелёк: wallet
   });
+
+  return { id };
+}
 
   // После addRow кэш и так сбросится, но на всякий случай
   await transactionsSheet.resetLocalCache();
