@@ -38,13 +38,15 @@ function helpText() {
     const { handleInitial } = require('./initial');
     const { handleTransfer } = require('./transfer');
 
-    // Команды
+       // Команды
     bot.start((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), require('./keyboards').mainKeyboard()));
 
     bot.command('баланс', sendBalance);
-    bot.command('остаток', handleInitial);
-    bot.command('перевод', handleTransfer);
+
+    // Команды с аргументами — через hears
+    bot.hears(/^\/остаток\s+/i, handleInitial);
+    bot.hears(/^\/перевод\s+/i, handleTransfer);
 
     // Кнопки
     bot.action('balance', sendBalance);
