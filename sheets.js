@@ -1,3 +1,4 @@
+// sheets.js
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 
@@ -5,6 +6,7 @@ const SHEET_ID = '1qu5qJSv1jVZAU5yBbHC0AlC07udvv869SIarN3qdkzs';
 
 global.transactionsSheet = null;
 global.debtsSheet = null;
+global.doc = null; // ← добавляем global.doc
 
 module.exports = (async () => {
   try {
@@ -46,6 +48,8 @@ module.exports = (async () => {
       }
     }
     global.debtsSheet = sheet;
+
+    global.doc = doc; // ← сохраняем doc для loadInfo()
 
     console.log('Google Sheets инициализированы');
   } catch (error) {
