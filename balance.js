@@ -1,10 +1,11 @@
 // balance.js
-const { transactionsSheet, debtsSheet } = global;
+// balance.js
+const { transactionsSheet, debtsSheet, doc } = global; // ← добавляем doc
 const { mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
 
 async function getBalance() {
-  await transactionsSheet.resetLocalCache(); // ← это вместо loadInfo()
+  await doc.loadInfo(); // ← перезагружаем метаданные документа
   const transRows = await transactionsSheet.getRows();
 
   const balances = {
@@ -22,7 +23,7 @@ async function getBalance() {
     balances[wallet] += Number(row.get('Сумма')) || 0;
   });
 
-  await debtsSheet.resetLocalCache(); // ← и для долгов
+  await doc.loadInfo(); // ← для долгов тоже
   const debtRows = await debtsSheet.getRows();
   const debtTotal = debtRows.reduce((sum, row) => {
     const amount = Number(row.get('Сумма')) || 0;
@@ -32,6 +33,10 @@ async function getBalance() {
   balances.долги = debtTotal;
   return balances;
 }
+
+// sendBalance остаётся без изменений (как в твоём коде)
+
+module.exports = { sendBalance, getBalance };
 
 // balance.js — исправленный sendBalance
 async function sendBalance(ctx) {
