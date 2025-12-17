@@ -1,7 +1,10 @@
 // transaction.js
-// transaction.js
-const { transactionsSheet, doc } = global; // ← добавляем doc
-// ... остальное
+const { transactionsSheet, doc } = global; // ← добавили doc
+const { cancelLastKeyboard, mainKeyboard } = require('./keyboards');
+const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
+const { getBalance } = require('./balance');
+
+const lastOperations = new Map();
 
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   const date = new Date().toLocaleString('ru-RU');
@@ -10,6 +13,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
 
   await doc.loadInfo(); // ← перед getRows()
   const rows = await transactionsSheet.getRows();
+
   let maxId = 0;
   rows.forEach(r => {
     const id = Number(r.get('ID')) || 0;
@@ -30,58 +34,63 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
   return { id };
 }
 
-  // После addRow кэш и так сбросится, но на всякий случай
-  await transactionsSheet.resetLocalCache();
-
-  return { id };
-}
 function parseFreeInput(text) {
   const lower = text.toLowerCase();
 
-  // Доход — только если есть "+" или слова вроде зарплат*
-  if (text.includes('+') || /зарплат|зп|аванс|премия|кешбэк|подарок|возврат/i.test(lower)) {
-    const { wallet, cleaned } = extractWallet(text);
-    const words = cleaned.trim().split(/\s+/);
-
-    let amount = 0, amountIndex = -1;
-    for (let i = 0; i < words.length; i++) {
-      let numStr = words[i].replace('+', '');
-      amount = parseFloat(numStr);
-      if (!isNaN(amount) && amount > 0) {
-        amountIndex = i;
-        break;
-      }
-    }
-
-    if (amountIndex === -1) return null;
-
-    const categoryWords = [...words];
-    categoryWords.splice(amountIndex, 1);
-    const category = categoryWords.join(' ').trim() || 'доход';
-
-    return { type: 'доход', amount, category, wallet };
+  if (lower.startsWith('дал ') || lower.startsWith('выдал ')) {
+    const parts = text.split(' ');
+    if (parts.length < 3) return null;
+    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+    const amount = parseFloat(parts[2]);
+    const comment = parts.slice(3).join(' ');
+    if (isNaN(amount) || amount <= 0) return null;
+    return { action: 'lend', debtor, amount, comment };
   }
 
-  // Расход — всё остальное с числом
+  if (lower.startsWith('вернули ') || lower.startsWith('вернул ')) {
+    const parts = text.split(' ');
+    if (parts.length < 3) return null;
+    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
+    const amount = parseFloat(parts[2]);
+    const comment = parts.slice(3).join(' ');
+    if (isNaN(amount) || amount <= 0) return null;
+    return { action: 'return_debt', debtor, amount, comment };
+  }
+
+  if (lower.startsWith('добавить долг ')) {
+    const rest = text.slice(13).trim();
+    const words = rest.split(' ');
+    let amount = 0, amountIndex = -1;
+    for (let i = 0; i < words.length; i++) {
+      amount = parseFloat(words[i]);
+      if (!isNaN(amount) && amount > 0) { amountIndex = i; break; }
+    }
+    if (amountIndex === -1 || amount <= 0 || amountIndex === 0) return null;
+    const debtor = words.slice(0, amountIndex).join(' ').replace(/^\w/, c => c.toUpperCase());
+    const comment = words.slice(amountIndex + 1).join(' ');
+    return { action: 'opening_debt', debtor, amount, comment };
+  }
+
   const { wallet, cleaned } = extractWallet(text);
   const words = cleaned.trim().split(/\s+/);
 
   let amount = 0, amountIndex = -1;
   for (let i = 0; i < words.length; i++) {
-    amount = parseFloat(words[i]);
-    if (!isNaN(amount) && amount > 0) {
-      amountIndex = i;
-      break;
-    }
+    let numStr = words[i].replace('+', '');
+    amount = parseFloat(numStr);
+    if (!isNaN(amount) && amount > 0) { amountIndex = i; break; }
   }
 
-  if (amountIndex === -1) return null;
+  if (amountIndex === -1 || amount <= 0) return null;
+
+  const hasPlus = text.includes('+') || /зарплат|зп|аванс|кешбэк|подарок|премия|возврат/i.test(lower);
+  const kind = hasPlus ? 'доход' : 'расход';
 
   const categoryWords = [...words];
   categoryWords.splice(amountIndex, 1);
   const category = categoryWords.join(' ').trim() || 'разное';
 
-  return { type: 'расход', amount, category, wallet };
+  return { action: 'transaction', kind, amount, category, wallet };
 }
 
 async function handleFreeInput(ctx) {
@@ -89,7 +98,7 @@ async function handleFreeInput(ctx) {
   const parsed = parseFreeInput(text);
 
   if (!parsed) {
-    await ctx.reply('Не понял ввод 😅\nПримеры:\nкофе 250\n250 кофе #наличка\n+100000 зарплата', mainKeyboard());
+    await ctx.reply('Не понял ввод 😅\nПримеры:\nкофе 250\n250 кофе #карта\n+15000 зп\nдал Иван 5000', mainKeyboard());
     return;
   }
 
