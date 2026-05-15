@@ -107,6 +107,4 @@ function parseFreeInput(text) {
 
   return { action: 'transaction', kind, amount, category, wallet };
 }
-
-
 module.exports = { handleFreeInput, addTransaction, lastOperations };
