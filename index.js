@@ -49,6 +49,15 @@ function helpText() {
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
 
+    console.log('DEBUG handlers:', {
+  sendBalance: typeof sendBalance,
+  handleInitial: typeof handleInitial,
+  handleTransfer: typeof handleTransfer,
+  handleFreeInput: typeof handleFreeInput,
+  handleCancelLast: typeof handleCancelLast,
+  sendDebtors: typeof sendDebtors
+});
+
  // === Команды ===
 bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
