@@ -84,13 +84,66 @@ const CATEGORY_SYNONYMS = {
     'посуда'
   ],
 
+  жилье: [
+    'жилье',
+    'жильё',
+    'аренда',
+    'ипотека',
+    'квартира',
+    'съем',
+    'съём',
+    'съем квартиры',
+    'съём квартиры',
+    'коммуналка',
+    'жкх'
+  ],
+
+  дети: [
+    'дети',
+    'ребенок',
+    'ребёнок',
+    'алименты',
+    'кружки',
+    'кружок',
+    'школа',
+    'садик',
+    'детский сад',
+    'игрушки',
+    'детская одежда',
+    'няня'
+  ],
+
+  спорт: [
+    'спорт',
+    'тренер',
+    'зал',
+    'фитнес',
+    'спортзал',
+    'абонемент',
+    'бассейн',
+    'тренировка',
+    'персоналка'
+  ],
+
+  алкоголь: [
+    'алкоголь',
+    'пиво',
+    'вино',
+    'виски',
+    'коньяк',
+    'водка',
+    'шампанское',
+    'просекко',
+    'бар'
+  ],
+
   развлечения: [
     'развлечения',
     'кино',
-    'бар',
     'клуб',
     'театр',
-    'концерт'
+    'концерт',
+    'игры'
   ],
 
   вредные_привычки: [
@@ -118,6 +171,12 @@ const CATEGORY_SYNONYMS = {
     'кешбэк',
     'кэшбэк',
     'cashback'
+  ],
+
+  прочее: [
+    'прочее',
+    'разное',
+    'другое'
   ]
 };
 
@@ -125,19 +184,45 @@ function normalizeText(value) {
   return String(value || '')
     .toLowerCase()
     .trim()
+    .replace(/ё/g, 'е')
     .replace(/\s+/g, ' ');
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function normalizeCategory(category) {
   const value = normalizeText(category);
 
   if (!value) {
-    return 'разное';
+    return 'прочее';
   }
 
+  // 1. Точное совпадение
   for (const [categoryName, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
-    if (synonyms.includes(value)) {
+    const normalizedSynonyms = synonyms.map(normalizeText);
+
+    if (normalizedSynonyms.includes(value)) {
       return categoryName;
+    }
+  }
+
+  // 2. Поиск синонима внутри фразы
+  // Например: "аренда квартиры" → жилье, "тренер зал" → спорт
+  for (const [categoryName, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
+    for (const synonym of synonyms) {
+      const normalizedSynonym = normalizeText(synonym);
+
+      if (!normalizedSynonym || normalizedSynonym.length < 3) {
+        continue;
+      }
+
+      const regex = new RegExp(`(^|\\s)${escapeRegExp(normalizedSynonym)}($|\\s)`, 'i');
+
+      if (regex.test(value)) {
+        return categoryName;
+      }
     }
   }
 
@@ -148,8 +233,14 @@ function getCategoryList() {
   return Object.keys(CATEGORY_SYNONYMS).sort();
 }
 
+function isKnownCategory(category) {
+  const normalized = normalizeCategory(category);
+  return Object.prototype.hasOwnProperty.call(CATEGORY_SYNONYMS, normalized);
+}
+
 module.exports = {
   CATEGORY_SYNONYMS,
   normalizeCategory,
-  getCategoryList
+  getCategoryList,
+  isKnownCategory
 };
