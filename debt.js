@@ -149,9 +149,11 @@ async function handleDebtOperation(ctx, parsed) {
     const wallet = normWallet(walletData.wallet || DEFAULT_WALLET);
     const comment = walletData.cleaned || '';
 
-    if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(wallet)) {
-      return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
-    }
+    if (!['карта', 'наличка', 'евро', 'доллары', 'депозит', 'зарубежная_карта'].includes(wallet)) {
+     return ctx.reply(
+  'Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит, зарубежная_карта',
+  menuKeyboard()
+);
 
     if (parsed.action === 'lend') {
      const transactionId = await addTransactionRow({
