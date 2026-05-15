@@ -1,7 +1,7 @@
 // budgets.js
 const { Markup } = require('telegraf');
 const { menuKeyboard } = require('./keyboards');
-const { normalizeCategory, getCategoryList } = require('./categories');
+const { normalizeCategory, getExpenseCategoryList } = require('./categories');
 const { walletCurrency } = require('./utils');
 
 const pendingBudgetInputs = new Map();
@@ -157,7 +157,7 @@ function budgetMenuKeyboard() {
 }
 
 function budgetCategoryKeyboard() {
-  const categories = getCategoryList();
+  const categories = getExpenseCategoryList();
 
   const buttons = categories.map(category => {
     return Markup.button.callback(category, `budgetcat:${category}`);
@@ -232,6 +232,14 @@ async function handleSetBudget(ctx) {
     }
 
     const category = normalizeCategory(match[1]);
+
+    if (['зарплата', 'кешбэк'].includes(category)) {
+  return ctx.reply(
+    `Категория "${category}" относится к доходам и не используется в бюджетах расходов.`,
+    menuKeyboard()
+  );
+}
+    
     const limit = parseAmount(match[2]);
     const currency = match[3] || '₽';
     const monthKey = getCurrentMonthKey();
@@ -348,6 +356,12 @@ async function handleBudgetCategorySelected(ctx) {
     const data = ctx.callbackQuery.data;
 
     const category = normalizeCategory(data.replace('budgetcat:', ''));
+    if (['зарплата', 'кешбэк'].includes(category)) {
+  return ctx.reply(
+    `Категория "${category}" относится к доходам и не используется в бюджетах расходов.`,
+    menuKeyboard()
+  );
+}
     const prevMonthDate = getPreviousMonthDate();
     const prevSpent = await getCategorySpent(category, '₽', prevMonthDate);
 
