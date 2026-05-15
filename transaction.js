@@ -253,7 +253,6 @@ async function handleFreeInput(ctx) {
     (balances.карта || 0) +
     (balances.наличка || 0) +
     (balances.депозит || 0) +
-    (balances.зарубежная_карта || 0) +
     (balances.долги || 0);
 
   const message =
