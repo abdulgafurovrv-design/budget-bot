@@ -68,6 +68,7 @@ bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 bot.hears(/^\/?баланс$/i, sendBalance);
 bot.hears(/^\/?остаток\s+/i, handleInitial);
 bot.hears(/^\/?перевод\s+/i, handleTransfer);
+    bot.hears(/^\/?обмен\s+/i, handleExchange);
     bot.hears(/^\/?(отчет|отчёт|сегодня)$/i, sendTodayReport);
 bot.hears(/^\/?(месяц|отчет месяц|отчёт месяц)$/i, sendMonthReport);
     bot.hears(/^\/?(report_now|отчет сейчас|отчёт сейчас)$/i, sendTodayReport);
