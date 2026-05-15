@@ -68,6 +68,7 @@ async function handleCancelLast(ctx) {
         (balances.карта || 0) +
         (balances.наличка || 0) +
         (balances.депозит || 0) +
+        (balances.зарубежная_карта || 0) +
         (balances.долги || 0);
 
       return ctx.reply(
