@@ -156,10 +156,11 @@ async function handleFreeInput(ctx) {
 
   const walletBalance = balances[parsed.wallet] || 0;
   const totalMain =
-    (balances.карта || 0) +
-    (balances.наличка || 0) +
-    (balances.депозит || 0) +
-    (balances.долги || 0);
+  (balances.карта || 0) +
+  (balances.наличка || 0) +
+  (balances.депозит || 0) +
+  (balances.зарубежная_карта || 0) +
+  (balances.долги || 0);
 
   const message =
     `Операция прошла успешно ✅\n\n` +
