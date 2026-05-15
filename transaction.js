@@ -3,9 +3,120 @@ const { cancelLastKeyboard, mainKeyboard } = require('./keyboards');
 const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
 const { getBalance } = require('./balance');
 const { handleDebtOperation, sendDebtors } = require('./debt');
+const { Markup } = require('telegraf');
+const { normalizeCategory, isKnownCategory, getCategoryList } = require('./categories');
+const { buildBudgetStatus } = require('./budgets');
 
 const lastOperations = new Map();
 global.lastOperations = lastOperations;
+
+const pendingCategoryOperations = new Map();
+
+function categorySelectKeyboard() {
+  const categories = getCategoryList();
+
+  const buttons = categories.map(category => {
+    return Markup.button.callback(category, `catselect:${category}`);
+  });
+
+  const rows = [];
+
+  for (let i = 0; i < buttons.length; i += 2) {
+    rows.push(buttons.slice(i, i + 2));
+  }
+
+  rows.push([Markup.button.callback('Отменить', 'catselect_cancel')]);
+
+  return Markup.inlineKeyboard(rows);
+}
+
+async function finishTransaction(ctx, parsed, categoryOverride = null) {
+  const finalCategory = categoryOverride
+    ? normalizeCategory(categoryOverride)
+    : normalizeCategory(parsed.category);
+
+  const result = await addTransaction(
+    parsed.kind,
+    parsed.amount,
+    finalCategory,
+    '',
+    parsed.wallet
+  );
+
+  if (!result.success) {
+    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
+    return;
+  }
+
+  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
+  const balances = await getBalance();
+
+  const walletBalance = balances[parsed.wallet] || 0;
+
+  const totalMain =
+    (balances.карта || 0) +
+    (balances.наличка || 0) +
+    (balances.депозит || 0) +
+    (balances.долги || 0);
+
+  const currency =
+    parsed.wallet === 'зарубежная_карта' || parsed.wallet === 'доллары'
+      ? '$'
+      : parsed.wallet === 'евро'
+        ? '€'
+        : '₽';
+
+  let budgetText = '';
+
+  if (parsed.kind === 'расход') {
+    budgetText = await buildBudgetStatus(finalCategory, parsed.wallet);
+  }
+
+  const message =
+    `Операция прошла успешно ✅\n\n` +
+    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ${currency} — ${finalCategory}\n` +
+    `Кошелёк: #${parsed.wallet}\n\n` +
+    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ${currency}\n` +
+    `Общий итог ₽: ${totalMain.toFixed(2)} ₽` +
+    budgetText;
+
+  lastOperations.set(ctx.chat.id, {
+    type: 'trans',
+    id: result.id
+  });
+
+  await ctx.replyWithHTML(message, cancelLastKeyboard());
+}
+
+async function handleCategorySelected(ctx) {
+  try {
+    await ctx.answerCbQuery();
+
+    const chatId = ctx.chat.id;
+    const pending = pendingCategoryOperations.get(chatId);
+
+    if (!pending) {
+      return ctx.reply('Нет операции, ожидающей выбора категории', menuKeyboard());
+    }
+
+    const data = ctx.callbackQuery.data;
+
+    if (data === 'catselect_cancel') {
+      pendingCategoryOperations.delete(chatId);
+      return ctx.reply('Операция отменена', menuKeyboard());
+    }
+
+    const category = data.replace('catselect:', '');
+
+    pendingCategoryOperations.delete(chatId);
+
+    return finishTransaction(ctx, pending, category);
+
+  } catch (error) {
+    console.error('Ошибка выбора категории:', error);
+    return ctx.reply('Ошибка выбора категории ❌', menuKeyboard());
+  }
+}
 
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   try {
@@ -231,21 +342,24 @@ async function handleFreeInput(ctx) {
     return handleDebtOperation(ctx, parsed);
   }
 
-  const result = await addTransaction(
-    parsed.kind,
-    parsed.amount,
-    parsed.category,
-    '',
-    parsed.wallet
+const normalizedCategory = normalizeCategory(parsed.category);
+
+if (!isKnownCategory(parsed.category)) {
+  pendingCategoryOperations.set(ctx.chat.id, {
+    ...parsed,
+    originalCategory: parsed.category
+  });
+
+  return ctx.reply(
+    `Не нашёл категорию: "${parsed.category}"\n\n` +
+    `Выбери категорию из списка или отнеси в "прочее":`,
+    categorySelectKeyboard()
   );
+}
 
-  if (!result.success) {
-    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
-    return;
-  }
+parsed.category = normalizedCategory;
 
-  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
-  const balances = await getBalance();
+return finishTransaction(ctx, parsed);
 
   const walletBalance = balances[parsed.wallet] || 0;
 
@@ -272,6 +386,7 @@ async function handleFreeInput(ctx) {
 
 module.exports = {
   handleFreeInput,
+  handleCategorySelected,
   addTransaction,
   lastOperations
 };
