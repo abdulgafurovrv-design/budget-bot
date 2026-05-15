@@ -1,6 +1,6 @@
 // exchange.js
 const { transactionsSheet, doc } = global;
-const { menuKeyboard } = require('./keyboards');
+const { menuKeyboard, cancelLastKeyboard } = require('./keyboards');
 const { normWallet, walletCurrency } = require('./utils');
 const { getBalance } = require('./balance');
 
@@ -38,13 +38,6 @@ async function handleExchange(ctx) {
   try {
     const text = ctx.message.text.trim();
     const parts = text.split(/\s+/);
-
-    // Формат:
-    // /обмен <откуда> <куда> <сумма_списания> <сумма_зачисления>
-    //
-    // Пример:
-    // /обмен карта зарубежная_карта 9000 100
-    // /обмен зарубежная_карта карта 100 9200
 
     if (parts.length < 5) {
       return ctx.reply(
@@ -94,6 +87,15 @@ async function handleExchange(ctx) {
     const fromCurrency = walletCurrency(fromWallet);
     const toCurrency = walletCurrency(toWallet);
 
+    if (fromCurrency === toCurrency) {
+      return ctx.reply(
+        'Для кошельков в одной валюте используй /перевод.\n\n' +
+        'Пример:\n' +
+        '/перевод доллары зарубежная_карта 100',
+        menuKeyboard()
+      );
+    }
+
     const date = new Date().toLocaleString('ru-RU');
 
     const firstId = await getNextTransactionId();
@@ -121,6 +123,17 @@ async function handleExchange(ctx) {
       Кошелёк: toWallet
     });
 
+    if (global.lastOperations) {
+      global.lastOperations.set(ctx.chat.id, {
+        type: 'exchange',
+        transactionIds: [firstId, secondId],
+        fromWallet,
+        toWallet,
+        fromAmount,
+        toAmount
+      });
+    }
+
     const balances = await getBalance();
 
     return ctx.reply(
@@ -131,7 +144,7 @@ async function handleExchange(ctx) {
       `Баланс #${fromWallet}: ${(balances[fromWallet] || 0).toFixed(2)} ${fromCurrency}\n` +
       `Баланс #${toWallet}: ${(balances[toWallet] || 0).toFixed(2)} ${toCurrency}\n\n` +
       `ИТОГ ₽: ${(balances.totalMain || 0).toFixed(2)} ₽`,
-      menuKeyboard()
+      cancelLastKeyboard()
     );
 
   } catch (error) {
