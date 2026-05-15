@@ -93,7 +93,14 @@ function isCancelText(text) {
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
     const { sendTodayReport, sendMonthReport } = require('./report');
-    const { handleSetBudget, sendBudgets } = require('./budgets');
+   const {
+  handleSetBudget,
+  sendBudgets,
+  showBudgetCategories,
+  handleBudgetCategorySelected,
+  handleBudgetCancel,
+  handleBudgetAmountInput
+} = require('./budgets');
     const { startAutoReport } = require('./autoReport');
 
     console.log('DEBUG handlers:', {
@@ -142,6 +149,9 @@ function isCancelText(text) {
     bot.action('debtors', sendDebtors);
     bot.action('report', sendTodayReport);
     bot.action('budgets', sendBudgets);
+    bot.action('budget_add', showBudgetCategories);
+bot.action(/^budgetcat:/, handleBudgetCategorySelected);
+bot.action('budget_cancel', handleBudgetCancel);
 
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
@@ -237,6 +247,12 @@ bot.action('catselect_cancel', handleCategorySelected);
       const chatId = ctx.chat.id;
       const text = ctx.message.text.trim();
       const mode = pendingModes.get(chatId);
+
+      const budgetHandled = await handleBudgetAmountInput(ctx);
+
+if (budgetHandled) {
+  return;
+}
 
       if (mode) {
         if (isCancelText(text)) {
