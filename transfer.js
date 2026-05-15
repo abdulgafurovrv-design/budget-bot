@@ -1,70 +1,146 @@
 // transfer.js
-const { transactionsSheet, doc } = global; // ← добавили doc
-const { menuKeyboard } = require('./keyboards');
-const { normWallet } = require('./utils');
+const { transactionsSheet, doc } = global;
+const { menuKeyboard, cancelLastKeyboard } = require('./keyboards');
+const { normWallet, walletCurrency } = require('./utils');
 const { getBalance } = require('./balance');
 
-async function handleTransfer(ctx) {
-  const parts = ctx.message.text.trim().split(' ');
-  if (parts.length < 4 || parts[0] !== '/перевод') {
-    return ctx.reply('Формат: /перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', menuKeyboard());
-  }
+const ALLOWED_WALLETS = [
+  'карта',
+  'наличка',
+  'депозит',
+  'зарубежная_карта',
+  'евро',
+  'доллары'
+];
 
-  const fromWallet = normWallet(parts[1]);
-  const toWallet = normWallet(parts[2]);
-  const amount = parseFloat(parts[3].replace(',', '.'));
+async function getNextTransactionId() {
+  await doc.loadInfo();
 
-  if (isNaN(amount) || amount <= 0) {
-    return ctx.reply('Сумма должна быть положительной цифрой', menuKeyboard());
-  }
-
-  if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(fromWallet) ||
-      !['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(toWallet)) {
-    return ctx.reply('Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит', menuKeyboard());
-  }
-
-  if (fromWallet === toWallet) {
-    return ctx.reply('Нельзя переводить на тот же кошелёк', menuKeyboard());
-  }
-
-  const balances = await getBalance();
-  if (balances[fromWallet] < amount) {
-    return ctx.reply(`Недостаточно средств на #${fromWallet}: ${balances[fromWallet].toFixed(2)} ₽`, menuKeyboard());
-  }
-
-  const date = new Date().toLocaleString('ru-RU');
-
-  await doc.loadInfo(); // ← перед getRows()
   const rows = await transactionsSheet.getRows();
 
   let maxId = 0;
-  rows.forEach(r => {
-    const id = Number(r.get('ID')) || 0;
+
+  rows.forEach(row => {
+    const id = Number(row.get('ID')) || 0;
     if (id > maxId) maxId = id;
   });
 
-  await transactionsSheet.addRow({
-    ID: maxId + 1,
-    Дата: date,
-    Тип: 'расход',
-    Сумма: -amount,
-    Категория: 'перевод',
-    Комментарий: `на ${toWallet}`,
-    Кошелёк: fromWallet
-  });
-
-  await transactionsSheet.addRow({
-    ID: maxId + 2,
-    Дата: date,
-    Тип: 'доход',
-    Сумма: amount,
-    Категория: 'перевод',
-    Комментарий: `с ${fromWallet}`,
-    Кошелёк: toWallet
-  });
-
-  const newBalances = await getBalance();
-  await ctx.reply(`Перевод ${amount.toFixed(2)} ₽ с #${fromWallet} на #${toWallet} выполнен!\nНовый баланс:\n• ${fromWallet}: ${newBalances[fromWallet].toFixed(2)} ₽\n• ${toWallet}: ${newBalances[toWallet].toFixed(2)} ₽`, menuKeyboard());
+  return maxId + 1;
 }
 
-module.exports = { handleTransfer };
+async function handleTransfer(ctx) {
+  try {
+    const text = ctx.message.text.trim();
+    const parts = text.split(/\s+/);
+
+    if (parts.length < 4) {
+      return ctx.reply(
+        'Формат перевода:\n' +
+        '/перевод <откуда> <куда> <сумма>\n\n' +
+        'Примеры:\n' +
+        '/перевод карта депозит 50000\n' +
+        '/перевод доллары зарубежная_карта 100\n' +
+        '/перевод зарубежная_карта доллары 50',
+        menuKeyboard()
+      );
+    }
+
+    const fromWallet = normWallet(parts[1]);
+    const toWallet = normWallet(parts[2]);
+    const amount = Number(String(parts[3]).replace(',', '.'));
+
+    if (!ALLOWED_WALLETS.includes(fromWallet)) {
+      return ctx.reply(
+        `Неизвестный кошелёк списания: ${parts[1]}\n\n` +
+        `Доступные кошельки: ${ALLOWED_WALLETS.join(', ')}`,
+        menuKeyboard()
+      );
+    }
+
+    if (!ALLOWED_WALLETS.includes(toWallet)) {
+      return ctx.reply(
+        `Неизвестный кошелёк зачисления: ${parts[2]}\n\n` +
+        `Доступные кошельки: ${ALLOWED_WALLETS.join(', ')}`,
+        menuKeyboard()
+      );
+    }
+
+    if (fromWallet === toWallet) {
+      return ctx.reply('Кошелёк списания и кошелёк зачисления совпадают', menuKeyboard());
+    }
+
+    if (!amount || Number.isNaN(amount) || amount <= 0) {
+      return ctx.reply('Сумма перевода должна быть больше 0', menuKeyboard());
+    }
+
+    const fromCurrency = walletCurrency(fromWallet);
+    const toCurrency = walletCurrency(toWallet);
+
+    if (fromCurrency !== toCurrency) {
+      return ctx.reply(
+        'Перевод между разными валютами запрещён.\n\n' +
+        'Для обмена используй команду:\n' +
+        '/обмен <откуда> <куда> <сумма_списания> <сумма_зачисления>\n\n' +
+        'Пример:\n' +
+        '/обмен карта зарубежная_карта 9000 100',
+        menuKeyboard()
+      );
+    }
+
+    const date = new Date().toLocaleString('ru-RU');
+
+    const firstId = await getNextTransactionId();
+    const secondId = firstId + 1;
+
+    await transactionsSheet.addRow({
+      ID: firstId,
+      Дата: date,
+      Тип: 'перевод',
+      Сумма: -amount,
+      Категория: 'перевод',
+      Комментарий: `перевод в ${toWallet}`,
+      Кошелёк: fromWallet
+    });
+
+    await transactionsSheet.addRow({
+      ID: secondId,
+      Дата: date,
+      Тип: 'перевод',
+      Сумма: amount,
+      Категория: 'перевод',
+      Комментарий: `перевод из ${fromWallet}`,
+      Кошелёк: toWallet
+    });
+
+    if (global.lastOperations) {
+      global.lastOperations.set(ctx.chat.id, {
+        type: 'transfer',
+        transactionIds: [firstId, secondId],
+        fromWallet,
+        toWallet,
+        amount
+      });
+    }
+
+    const balances = await getBalance();
+
+    return ctx.reply(
+      `Перевод выполнен ✅\n\n` +
+      `Сумма: ${amount.toFixed(2)} ${fromCurrency}\n` +
+      `Откуда: #${fromWallet}\n` +
+      `Куда: #${toWallet}\n\n` +
+      `Баланс #${fromWallet}: ${(balances[fromWallet] || 0).toFixed(2)} ${fromCurrency}\n` +
+      `Баланс #${toWallet}: ${(balances[toWallet] || 0).toFixed(2)} ${toCurrency}\n\n` +
+      `ИТОГ ₽: ${(balances.totalMain || 0).toFixed(2)} ₽`,
+      cancelLastKeyboard()
+    );
+
+  } catch (error) {
+    console.error('Ошибка перевода:', error);
+    return ctx.reply('Ошибка перевода ❌', menuKeyboard());
+  }
+}
+
+module.exports = {
+  handleTransfer
+};
