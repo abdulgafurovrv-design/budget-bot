@@ -229,8 +229,10 @@ function normalizeCategory(category) {
   return value;
 }
 
-function getCategoryList() {
-  return Object.keys(CATEGORY_SYNONYMS).sort();
+function getExpenseCategoryList() {
+  return getCategoryList().filter(category => {
+    return !['зарплата', 'кешбэк'].includes(category);
+  });
 }
 
 function isKnownCategory(category) {
@@ -242,5 +244,6 @@ module.exports = {
   CATEGORY_SYNONYMS,
   normalizeCategory,
   getCategoryList,
+  getExpenseCategoryList,
   isKnownCategory
 };
