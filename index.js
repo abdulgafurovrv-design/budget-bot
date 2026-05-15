@@ -14,6 +14,9 @@ const initSheets = require('./sheets');
 // === 2. Клавиатуры ===
 const { mainKeyboard, menuKeyboard } = require('./keyboards');
 
+// === Состояние кнопок Расход+/Доход+ ===
+const pendingModes = new Map();
+
 // === Приветствие ===
 function helpText() {
   return `<b>Привет! Я твой бюджет-бот 🚀</b>
@@ -43,6 +46,19 @@ function helpText() {
 • месяц
 
 Нажми кнопки 👇`;
+}
+
+function isCancelText(text) {
+  const value = String(text || '').trim().toLowerCase();
+
+  return [
+    'отмена',
+    'отменить',
+    'назад',
+    'меню',
+    '/cancel',
+    '/start'
+  ].includes(value);
 }
 
 // === Запуск после инициализации Sheets ===
@@ -77,7 +93,11 @@ function helpText() {
     });
 
     // === Команды ===
-    bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
+    bot.start((ctx) => {
+      pendingModes.delete(ctx.chat.id);
+      return ctx.replyWithHTML(helpText(), mainKeyboard());
+    });
+
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 
     // Кириллические команды ловим как текст, чтобы они не уходили в свободный ввод
@@ -100,6 +120,7 @@ function helpText() {
 
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
+
       await ctx.reply(
         'Используй команду:\n' +
         '/перевод <от_кошелька> <к_кошельку> <сумма>\n\n' +
@@ -110,8 +131,47 @@ function helpText() {
       );
     });
 
+    // === Кнопка Расход + ===
+    bot.action('expense', async (ctx) => {
+      await ctx.answerCbQuery();
+
+      pendingModes.set(ctx.chat.id, 'expense');
+
+      await ctx.reply(
+        'Введи расход одним сообщением.\n\n' +
+        'Примеры:\n' +
+        'кофе 300\n' +
+        'продукты 1200 нал\n' +
+        'такси 800 карта\n' +
+        'кофе 10 зарубежка\n\n' +
+        'Для отмены напиши: отмена',
+        menuKeyboard()
+      );
+    });
+
+    // === Кнопка Доход + ===
+    bot.action('income', async (ctx) => {
+      await ctx.answerCbQuery();
+
+      pendingModes.set(ctx.chat.id, 'income');
+
+      await ctx.reply(
+        'Введи доход одним сообщением.\n\n' +
+        'Примеры:\n' +
+        'зарплата 100000 карта\n' +
+        'аванс 30000\n' +
+        'кешбэк 500 карта\n' +
+        'подарок 100 зарубежка\n\n' +
+        'Плюс ставить не обязательно.\n' +
+        'Для отмены напиши: отмена',
+        menuKeyboard()
+      );
+    });
+
     bot.action('menu', async (ctx) => {
       await ctx.answerCbQuery();
+
+      pendingModes.delete(ctx.chat.id);
 
       try {
         await ctx.editMessageText(helpText(), {
@@ -126,13 +186,38 @@ function helpText() {
     // === Отмена последней операции ===
     bot.action('cancel_last', handleCancelLast);
 
-    // === Пока заглушки ===
-    bot.action(['expense', 'income'], async (ctx) => {
-      await ctx.answerCbQuery('В разработке 🚧');
-    });
-
     // === Свободный ввод должен быть последним ===
-    bot.on('text', handleFreeInput);
+    bot.on('text', async (ctx) => {
+      const chatId = ctx.chat.id;
+      const text = ctx.message.text.trim();
+      const mode = pendingModes.get(chatId);
+
+      if (mode) {
+        if (isCancelText(text)) {
+          pendingModes.delete(chatId);
+          return ctx.reply('Ввод отменён', mainKeyboard());
+        }
+
+        pendingModes.delete(chatId);
+
+        // Если нажали "Доход +", принудительно делаем доход.
+        // Пользователь может писать без плюса: "зарплата 100000 карта"
+        if (mode === 'income') {
+          if (!text.startsWith('+')) {
+            ctx.message.text = `+${text}`;
+          }
+        }
+
+        // Если нажали "Расход +", принудительно убираем плюс, если он случайно поставлен.
+        if (mode === 'expense') {
+          ctx.message.text = text.replace(/^\+/, '');
+        }
+
+        return handleFreeInput(ctx);
+      }
+
+      return handleFreeInput(ctx);
+    });
 
     // === Глобальная обработка ошибок бота ===
     bot.catch((err) => {
