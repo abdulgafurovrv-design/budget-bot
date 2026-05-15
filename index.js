@@ -69,15 +69,16 @@ function isCancelText(text) {
     console.log('Sheets инициализированы, подключаем модули функционала');
 
     // === Подключаем модули после инициализации sheets ===
-    const { sendBalance } = require('./balance');
-    const { handleInitial } = require('./initial');
-    const { handleTransfer } = require('./transfer');
-    const { handleExchange } = require('./exchange');
-    const { handleFreeInput } = require('./transaction');
-    const { handleCancelLast } = require('./cancel');
-    const { sendDebtors } = require('./debt');
-    const { sendTodayReport, sendMonthReport } = require('./report');
-    const { startAutoReport } = require('./autoReport');
+  const { sendBalance } = require('./balance');
+const { handleInitial } = require('./initial');
+const { handleTransfer } = require('./transfer');
+const { handleExchange } = require('./exchange');
+const { handleFreeInput } = require('./transaction');
+const { handleCancelLast } = require('./cancel');
+const { sendDebtors } = require('./debt');
+const { sendTodayReport, sendMonthReport } = require('./report');
+const { handleSetBudget, sendBudgets } = require('./budgets');
+const { startAutoReport } = require('./autoReport');
 
     console.log('DEBUG handlers:', {
       sendBalance: typeof sendBalance,
@@ -109,6 +110,10 @@ function isCancelText(text) {
     bot.hears(/^\/?(отчет|отчёт|сегодня)$/i, sendTodayReport);
     bot.hears(/^\/?(месяц|отчет месяц|отчёт месяц)$/i, sendMonthReport);
     bot.hears(/^\/?(report_now|отчет сейчас|отчёт сейчас)$/i, sendTodayReport);
+
+    bot.hears(/^\/?бюджет\s+/i, handleSetBudget);
+bot.hears(/^\/?(бюджеты|лимиты)$/i, sendBudgets);
+    
 
     // === Автоотчёт каждый день в 23:59 ===
     startAutoReport(bot);
