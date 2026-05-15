@@ -49,6 +49,7 @@ function helpText() {
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
     const { sendTodayReport, sendMonthReport } = require('./report');
+    const { startAutoReport } = require('./autoReport');
 
     console.log('DEBUG handlers:', {
   sendBalance: typeof sendBalance,
@@ -69,6 +70,10 @@ bot.hears(/^\/?остаток\s+/i, handleInitial);
 bot.hears(/^\/?перевод\s+/i, handleTransfer);
     bot.hears(/^\/?(отчет|отчёт|сегодня)$/i, sendTodayReport);
 bot.hears(/^\/?(месяц|отчет месяц|отчёт месяц)$/i, sendMonthReport);
+    bot.hears(/^\/?(report_now|отчет сейчас|отчёт сейчас)$/i, sendTodayReport);
+
+// Запуск ежедневного автоотчёта
+startAutoReport(bot);
 
     // === Кнопки ===
     bot.action('balance', sendBalance);
