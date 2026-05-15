@@ -47,6 +47,7 @@ function helpText() {
     const { handleTransfer } = require('./transfer');
     const { handleFreeInput } = require('./transaction');
     const { handleCancelLast } = require('./cancel');
+    const { sendDebtors } = require('./debt');
 
     // === Команды ===
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
@@ -84,9 +85,11 @@ function helpText() {
     bot.action('cancel_last', handleCancelLast);
 
     // === Пока заглушки ===
-    bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
-      await ctx.answerCbQuery('В разработке 🚧');
-    });
+   bot.action('debtors', sendDebtors);
+    
+   bot.action(['report', 'expense', 'income'], async (ctx) => {
+  await ctx.answerCbQuery('В разработке 🚧');
+});
 
     // === Свободный ввод ===
     bot.on('text', handleFreeInput);
