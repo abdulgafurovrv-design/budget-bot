@@ -89,7 +89,7 @@ function isCancelText(text) {
     const { handleInitial } = require('./initial');
     const { handleTransfer } = require('./transfer');
     const { handleExchange } = require('./exchange');
-    const { handleFreeInput } = require('./transaction');
+ const { handleFreeInput, handleCategorySelected } = require('./transaction');
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
     const { sendTodayReport, sendMonthReport } = require('./report');
@@ -226,6 +226,9 @@ function isCancelText(text) {
       }
     });
 
+    bot.action(/^catselect:/, handleCategorySelected);
+bot.action('catselect_cancel', handleCategorySelected);
+    
     // === Отмена последней операции ===
     bot.action('cancel_last', handleCancelLast);
 
