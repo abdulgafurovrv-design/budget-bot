@@ -129,5 +129,7 @@ async function handleTransfer(ctx) {
 }
 
 module.exports = {
-  handleTransfer
+  handleFreeInput,
+  addTransaction,
+  lastOperations
 };
