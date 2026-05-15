@@ -259,7 +259,7 @@ async function handleFreeInput(ctx) {
     `Операция прошла успешно ✅\n\n` +
     `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
     `Кошелёк: #${parsed.wallet}\n\n` +
-    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ₽\n` +
+    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ${parsed.wallet === 'зарубежная_карта' || parsed.wallet === 'доллары' ? '$' : parsed.wallet === 'евро' ? '€' : '₽'}\n` +
     `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
 
   lastOperations.set(ctx.chat.id, {
