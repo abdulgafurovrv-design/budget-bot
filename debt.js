@@ -154,20 +154,31 @@ async function handleDebtOperation(ctx, parsed) {
     }
 
     if (parsed.action === 'lend') {
-      await addTransactionRow({
-        type: 'расход',
-        amount: -amount,
-        category: 'долг',
-        comment: `дал ${debtor}${comment ? `; ${comment}` : ''}`,
-        wallet
-      });
+     const transactionId = await addTransactionRow({
+  type: 'расход',
+  amount: -amount,
+  category: 'долг',
+  comment: `дал ${debtor}${comment ? `; ${comment}` : ''}`,
+  wallet
+});
 
-      await addDebtRow({
-        debtor,
-        amount,
-        type: 'выдал',
-        comment
-      });
+const debtId = await addDebtRow({
+  debtor,
+  amount,
+  type: 'выдал',
+  comment
+});
+
+if (global.lastOperations) {
+  global.lastOperations.set(ctx.chat.id, {
+    type: 'debt_lend',
+    transactionIds: [transactionId],
+    debtIds: [debtId],
+    debtor,
+    amount,
+    wallet
+  });
+}
 
       const balances = await getBalance();
 
@@ -183,20 +194,31 @@ async function handleDebtOperation(ctx, parsed) {
     }
 
     if (parsed.action === 'return_debt') {
-      await addTransactionRow({
-        type: 'доход',
-        amount,
-        category: 'возврат долга',
-        comment: `вернул ${debtor}${comment ? `; ${comment}` : ''}`,
-        wallet
-      });
+const transactionId = await addTransactionRow({
+  type: 'доход',
+  amount,
+  category: 'возврат долга',
+  comment: `вернул ${debtor}${comment ? `; ${comment}` : ''}`,
+  wallet
+});
 
-      await addDebtRow({
-        debtor,
-        amount: -amount,
-        type: 'вернули',
-        comment
-      });
+const debtId = await addDebtRow({
+  debtor,
+  amount: -amount,
+  type: 'вернули',
+  comment
+});
+
+if (global.lastOperations) {
+  global.lastOperations.set(ctx.chat.id, {
+    type: 'debt_return',
+    transactionIds: [transactionId],
+    debtIds: [debtId],
+    debtor,
+    amount,
+    wallet
+  });
+}
 
       const balances = await getBalance();
 
@@ -212,12 +234,23 @@ async function handleDebtOperation(ctx, parsed) {
     }
 
     if (parsed.action === 'opening_debt') {
-      await addDebtRow({
-        debtor,
-        amount,
-        type: 'начальный долг',
-        comment
-      });
+const debtId = await addDebtRow({
+  debtor,
+  amount,
+  type: 'начальный долг',
+  comment
+});
+
+if (global.lastOperations) {
+  global.lastOperations.set(ctx.chat.id, {
+    type: 'debt_opening',
+    transactionIds: [],
+    debtIds: [debtId],
+    debtor,
+    amount,
+    wallet: ''
+  });
+}
 
       const balances = await getBalance();
 
