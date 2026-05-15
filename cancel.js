@@ -79,7 +79,66 @@ async function handleCancelLast(ctx) {
         menuKeyboard()
       );
     }
+// Перевод между кошельками
+    if (last.type === 'transfer') {
+      const deletedTransactions = await deleteRowsByIds(
+        transactionsSheet,
+        last.transactionIds || []
+      );
 
+      lastOperations.delete(chatId);
+
+      if (deletedTransactions.length === 0) {
+        return ctx.reply(
+          'Перевод уже не найден в таблице. Возможно, он был удалён ранее.',
+          menuKeyboard()
+        );
+      }
+
+      const balances = await getBalance();
+
+      return ctx.reply(
+        `Последний перевод отменён ✅\n\n` +
+        `Удалено строк: ${deletedTransactions.length}\n` +
+        `Сумма: ${Number(last.amount).toFixed(2)}\n` +
+        `Откуда: #${last.fromWallet}\n` +
+        `Куда: #${last.toWallet}\n\n` +
+        `Баланс #${last.fromWallet}: ${(balances[last.fromWallet] || 0).toFixed(2)}\n` +
+        `Баланс #${last.toWallet}: ${(balances[last.toWallet] || 0).toFixed(2)}\n` +
+        `ИТОГ ₽: ${(balances.totalMain || 0).toFixed(2)} ₽`,
+        menuKeyboard()
+      );
+    }
+
+    // Обмен валюты
+    if (last.type === 'exchange') {
+      const deletedTransactions = await deleteRowsByIds(
+        transactionsSheet,
+        last.transactionIds || []
+      );
+
+      lastOperations.delete(chatId);
+
+      if (deletedTransactions.length === 0) {
+        return ctx.reply(
+          'Обмен уже не найден в таблице. Возможно, он был удалён ранее.',
+          menuKeyboard()
+        );
+      }
+
+      const balances = await getBalance();
+
+      return ctx.reply(
+        `Последний обмен отменён ✅\n\n` +
+        `Удалено строк: ${deletedTransactions.length}\n` +
+        `Списывалось: ${Number(last.fromAmount).toFixed(2)} с #${last.fromWallet}\n` +
+        `Зачислялось: ${Number(last.toAmount).toFixed(2)} на #${last.toWallet}\n\n` +
+        `Баланс #${last.fromWallet}: ${(balances[last.fromWallet] || 0).toFixed(2)}\n` +
+        `Баланс #${last.toWallet}: ${(balances[last.toWallet] || 0).toFixed(2)}\n` +
+        `ИТОГ ₽: ${(balances.totalMain || 0).toFixed(2)} ₽`,
+        menuKeyboard()
+      );
+    }
     // Долговые операции: дал, вернули, добавить долг
     if (
       last.type === 'debt_lend' ||
