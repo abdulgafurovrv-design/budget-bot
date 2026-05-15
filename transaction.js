@@ -1,5 +1,5 @@
 // transaction.js
-const { cancelLastKeyboard, mainKeyboard } = require('./keyboards');
+const { cancelLastKeyboard, mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
 const { getBalance } = require('./balance');
 const { handleDebtOperation, sendDebtors } = require('./debt');
