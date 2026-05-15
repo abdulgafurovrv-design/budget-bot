@@ -42,11 +42,11 @@ async function handleInitial(ctx) {
       return ctx.reply('Сумма должна быть числом', menuKeyboard());
     }
 
-    if (!['карта', 'наличка', 'евро', 'доллары', 'депозит'].includes(wallet)) {
-      return ctx.reply(
-        'Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит',
-        menuKeyboard()
-      );
+   if (!['карта', 'наличка', 'евро', 'доллары', 'депозит', 'зарубежная_карта'].includes(wallet)) {
+     return ctx.reply(
+  'Поддерживаемые кошельки: карта, наличка, евро, доллары, депозит, зарубежная_карта',
+  menuKeyboard()
+);
     }
 
     const balancesBefore = await getBalance();
