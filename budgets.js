@@ -1,7 +1,11 @@
 // budgets.js
 const { Markup } = require('telegraf');
 const { menuKeyboard } = require('./keyboards');
-const { normalizeCategory, getExpenseCategoryList } = require('./categories');
+const {
+  normalizeCategory,
+  getExpenseCategoryList,
+  isIncomeCategory
+} = require('./categories');
 const { walletCurrency } = require('./utils');
 
 const pendingBudgetInputs = new Map();
@@ -231,16 +235,16 @@ async function handleSetBudget(ctx) {
       );
     }
 
-    const category = normalizeCategory(match[1]);
+   const category = normalizeCategory(match[1]);
 
-    if (['зарплата', 'кешбэк'].includes(category)) {
+if (isIncomeCategory(category)) {
   return ctx.reply(
     `Категория "${category}" относится к доходам и не используется в бюджетах расходов.`,
     menuKeyboard()
   );
 }
-    
-    const limit = parseAmount(match[2]);
+
+const limit = parseAmount(match[2]);
     const currency = match[3] || '₽';
     const monthKey = getCurrentMonthKey();
 
@@ -276,13 +280,23 @@ async function sendBudgets(ctx) {
     const current = rows
       .filter(r => String(r.get('Месяц') || '').trim() === monthKey)
       .map(r => {
+        const category = normalizeCategory(r.get('Категория'));
+
         return {
-          category: normalizeCategory(r.get('Категория')),
+          category,
           limit: Number(r.get('Лимит')) || 0,
           currency: String(r.get('Валюта') || '₽').trim()
         };
       })
-      .filter(r => r.category && r.limit > 0);
+      .filter(r => {
+        if (!r.category) return false;
+        if (r.limit <= 0) return false;
+
+        // Доходные категории не показываем в бюджетах расходов
+        if (isIncomeCategory(r.category)) return false;
+
+        return true;
+      });
 
     if (current.length === 0) {
       return ctx.reply(
@@ -310,7 +324,8 @@ async function sendBudgets(ctx) {
 
       totalsByCurrency[item.currency] += item.limit;
 
-      msg += `• <b>${item.category}</b>: ${formatMoney(spent, item.currency)} / ${formatMoney(item.limit, item.currency)}`;
+      msg += `• <b>${item.category}</b>: ` +
+        `${formatMoney(spent, item.currency)} / ${formatMoney(item.limit, item.currency)}`;
 
       if (left >= 0) {
         msg += `, осталось ${formatMoney(left, item.currency)}\n`;
@@ -318,6 +333,20 @@ async function sendBudgets(ctx) {
         msg += `, ⚠️ превышение ${formatMoney(Math.abs(left), item.currency)}\n`;
       }
     }
+
+    msg += `\n<b>ИТОГО бюджет на месяц:</b>\n`;
+
+    Object.entries(totalsByCurrency).forEach(([currency, total]) => {
+      msg += `• ${formatMoney(total, currency)}\n`;
+    });
+
+    return ctx.replyWithHTML(msg, budgetMenuKeyboard());
+
+  } catch (error) {
+    console.error('Ошибка вывода бюджетов:', error);
+    return ctx.reply('Ошибка получения бюджетов ❌', menuKeyboard());
+  }
+}
 
     msg += `\n<b>ИТОГО бюджет на месяц:</b>\n`;
 
@@ -356,7 +385,7 @@ async function handleBudgetCategorySelected(ctx) {
     const data = ctx.callbackQuery.data;
 
     const category = normalizeCategory(data.replace('budgetcat:', ''));
-    if (['зарплата', 'кешбэк'].includes(category)) {
+   if (isIncomeCategory(category)) {
   return ctx.reply(
     `Категория "${category}" относится к доходам и не используется в бюджетах расходов.`,
     menuKeyboard()
