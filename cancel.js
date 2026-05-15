@@ -1,6 +1,3 @@
-
-// cancel.js
-const { transactionsSheet, doc } = global;
 const { menuKeyboard } = require('./keyboards');
 const { getBalance } = require('./balance');
 const { lastOperations } = require('./transaction');
@@ -16,7 +13,12 @@ async function handleCancelLast(ctx) {
       return ctx.reply('Нет операции для отмены', menuKeyboard());
     }
 
-    await doc.loadInfo();
+    const transactionsSheet = global.transactionsSheet;
+
+    if (!transactionsSheet) {
+      return ctx.reply('Ошибка: таблица транзакций не инициализирована', menuKeyboard());
+    }
+
     const rows = await transactionsSheet.getRows();
 
     const rowToDelete = rows.find(row => {
@@ -25,7 +27,10 @@ async function handleCancelLast(ctx) {
 
     if (!rowToDelete) {
       lastOperations.delete(chatId);
-      return ctx.reply('Операция уже не найдена в таблице. Возможно, она была удалена ранее.', menuKeyboard());
+      return ctx.reply(
+        'Операция уже не найдена в таблице. Возможно, она была удалена ранее.',
+        menuKeyboard()
+      );
     }
 
     const amount = Number(rowToDelete.get('Сумма')) || 0;
@@ -39,7 +44,11 @@ async function handleCancelLast(ctx) {
 
     const balances = await getBalance();
     const walletBalance = balances[wallet] || 0;
-    const totalMain = balances.карта + balances.наличка + balances.депозит + balances.долги;
+    const totalMain =
+      (balances.карта || 0) +
+      (balances.наличка || 0) +
+      (balances.депозит || 0) +
+      (balances.долги || 0);
 
     const absAmount = Math.abs(amount);
 
