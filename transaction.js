@@ -1,177 +1,133 @@
-// transaction.js
+// transfer.js
 const { transactionsSheet, doc } = global;
-const { cancelLastKeyboard, mainKeyboard } = require('./keyboards');
-const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
+const { menuKeyboard } = require('./keyboards');
+const { normWallet } = require('./utils');
 const { getBalance } = require('./balance');
-const { handleDebtOperation, sendDebtors } = require('./debt');
 
-const lastOperations = new Map();
-global.lastOperations = lastOperations;
+const ALLOWED_WALLETS = [
+  'карта',
+  'наличка',
+  'депозит',
+  'зарубежная_карта',
+  'евро',
+  'доллары'
+];
 
-async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
+async function getNextTransactionId() {
+  await doc.loadInfo();
+
+  const rows = await transactionsSheet.getRows();
+
+  let maxId = 0;
+
+  rows.forEach(row => {
+    const id = Number(row.get('ID')) || 0;
+    if (id > maxId) maxId = id;
+  });
+
+  return maxId + 1;
+}
+
+async function handleTransfer(ctx) {
   try {
+    const text = ctx.message.text.trim();
+
+    const parts = text.split(/\s+/);
+
+    // Формат:
+    // /перевод карта депозит 50000
+    // перевод карта зарубежная_карта 5000
+    if (parts.length < 4) {
+      return ctx.reply(
+        'Формат перевода:\n' +
+        '/перевод <откуда> <куда> <сумма>\n\n' +
+        'Примеры:\n' +
+        '/перевод карта депозит 50000\n' +
+        '/перевод карта зарубежная_карта 5000\n' +
+        '/перевод зарубежная_карта карта 1000',
+        menuKeyboard()
+      );
+    }
+
+    const fromWallet = normWallet(parts[1]);
+    const toWallet = normWallet(parts[2]);
+    const amount = Number(String(parts[3]).replace(',', '.'));
+
+    if (!ALLOWED_WALLETS.includes(fromWallet)) {
+      return ctx.reply(
+        `Неизвестный кошелёк списания: ${parts[1]}\n\n` +
+        `Доступные кошельки: ${ALLOWED_WALLETS.join(', ')}`,
+        menuKeyboard()
+      );
+    }
+
+    if (!ALLOWED_WALLETS.includes(toWallet)) {
+      return ctx.reply(
+        `Неизвестный кошелёк зачисления: ${parts[2]}\n\n` +
+        `Доступные кошельки: ${ALLOWED_WALLETS.join(', ')}`,
+        menuKeyboard()
+      );
+    }
+
+    if (fromWallet === toWallet) {
+      return ctx.reply('Кошелёк списания и кошелёк зачисления совпадают', menuKeyboard());
+    }
+
+    if (!amount || Number.isNaN(amount) || amount <= 0) {
+      return ctx.reply('Сумма перевода должна быть больше 0', menuKeyboard());
+    }
+
     const date = new Date().toLocaleString('ru-RU');
-    const sign = type === 'доход' ? amount : -amount;
-    wallet = normWallet(wallet);
 
-    await doc.loadInfo();
-    const rows = await transactionsSheet.getRows();
-
-    let maxId = 0;
-    rows.forEach(r => {
-      const id = Number(r.get('ID')) || 0;
-      if (id > maxId) maxId = id;
-    });
-    const id = maxId + 1;
+    const firstId = await getNextTransactionId();
+    const secondId = firstId + 1;
 
     await transactionsSheet.addRow({
-      ID: id,
+      ID: firstId,
       Дата: date,
-      Тип: type,
-      Сумма: sign,
-      Категория: category,
-      Комментарий: comment,
-      Кошелёк: wallet
+      Тип: 'перевод',
+      Сумма: -amount,
+      Категория: 'перевод',
+      Комментарий: `перевод в ${toWallet}`,
+      Кошелёк: fromWallet
     });
 
-    return { id, success: true };
-  } catch (err) {
-    console.error('Ошибка addTransaction:', err);
-    return { success: false, error: 'Не удалось добавить запись' };
-  }
-}
+    await transactionsSheet.addRow({
+      ID: secondId,
+      Дата: date,
+      Тип: 'перевод',
+      Сумма: amount,
+      Категория: 'перевод',
+      Комментарий: `перевод из ${fromWallet}`,
+      Кошелёк: toWallet
+    });
 
-function parseFreeInput(text) {
-  const lower = text.toLowerCase();
+    const balances = await getBalance();
 
-  // Долги — оставляем как есть (временно не обрабатываем)
-  if (lower.startsWith('дал ') || lower.startsWith('выдал ')) {
-    const parts = text.split(' ');
-    if (parts.length < 3) return null;
-    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
-    const amount = parseFloat(parts[2]);
-    const comment = parts.slice(3).join(' ');
-    if (isNaN(amount) || amount <= 0) return null;
-    return { action: 'lend', debtor, amount, comment };
-  }
+    const totalMain =
+      (balances.карта || 0) +
+      (balances.наличка || 0) +
+      (balances.депозит || 0) +
+      (balances.зарубежная_карта || 0) +
+      (balances.долги || 0);
 
-  if (lower.startsWith('вернули ') || lower.startsWith('вернул ')) {
-    const parts = text.split(' ');
-    if (parts.length < 3) return null;
-    const debtor = parts[1].charAt(0).toUpperCase() + parts[1].slice(1).toLowerCase();
-    const amount = parseFloat(parts[2]);
-    const comment = parts.slice(3).join(' ');
-    if (isNaN(amount) || amount <= 0) return null;
-    return { action: 'return_debt', debtor, amount, comment };
-  }
-
-  if (lower.startsWith('добавить долг ')) {
-    const rest = text.slice(13).trim();
-    const words = rest.split(' ');
-    let amount = 0, amountIndex = -1;
-    for (let i = 0; i < words.length; i++) {
-      amount = parseFloat(words[i]);
-      if (!isNaN(amount) && amount > 0) {
-        amountIndex = i;
-        break;
-      }
-    }
-    if (amountIndex === -1 || amount <= 0 || amountIndex === 0) return null;
-    const debtor = words.slice(0, amountIndex).join(' ').replace(/^\w/, c => c.toUpperCase());
-    const comment = words.slice(amountIndex + 1).join(' ');
-    return { action: 'opening_debt', debtor, amount, comment };
-  }
-
-  // Обычные транзакции
-  const { wallet, cleaned } = extractWallet(text);
-  const words = cleaned.trim().split(/\s+/);
-
-  let amount = 0, amountIndex = -1;
-  for (let i = 0; i < words.length; i++) {
-    let numStr = words[i].replace('+', '');
-    amount = parseFloat(numStr);
-    if (!isNaN(amount) && amount > 0) {
-      amountIndex = i;
-      break;
-    }
-  }
-
-  if (amountIndex === -1 || amount <= 0) return null;
-
-  const hasIncomeKeyword = /зарплат|зп|аванс|премия|кешбэк|подарок|возврат|доход/i.test(lower);
-  const hasPlus = text.includes('+');
-  const kind = hasPlus || hasIncomeKeyword ? 'доход' : 'расход';
-
-  const categoryWords = [...words];
-  categoryWords.splice(amountIndex, 1);
-  const category = categoryWords.join(' ').trim() || 'разное';
-
-  return { action: 'transaction', kind, amount, category, wallet };
-}
-
-async function handleFreeInput(ctx) {
-  const text = ctx.message.text.trim();
-
-  if (/^долги$/i.test(text) || /^должники$/i.test(text)) {
-    return sendDebtors(ctx);
-  }
-
-  const parsed = parseFreeInput(text);
-
-  if (!parsed) {
-    await ctx.reply(
-      'Не понял ввод 😅\n\n' +
-      'Примеры расходов и доходов:\n' +
-      'кофе 250\n' +
-      '250 кофе #карта\n' +
-      '+50000 зарплата\n\n' +
-      'Примеры долгов:\n' +
-      'дал Саша 5000 #карта\n' +
-      'вернули Саша 2000 #карта\n' +
-      'добавить долг Саша 10000',
-      mainKeyboard()
+    return ctx.reply(
+      `Перевод выполнен ✅\n\n` +
+      `Сумма: ${amount.toFixed(2)} ₽\n` +
+      `Откуда: #${fromWallet}\n` +
+      `Куда: #${toWallet}\n\n` +
+      `Баланс #${fromWallet}: ${(balances[fromWallet] || 0).toFixed(2)} ₽\n` +
+      `Баланс #${toWallet}: ${(balances[toWallet] || 0).toFixed(2)} ₽\n\n` +
+      `Общий итог (основные): ${totalMain.toFixed(2)} ₽`,
+      menuKeyboard()
     );
-    return;
+
+  } catch (error) {
+    console.error('Ошибка перевода:', error);
+    return ctx.reply('Ошибка перевода ❌', menuKeyboard());
   }
-
-  if (parsed.action !== 'transaction') {
-    return handleDebtOperation(ctx, parsed);
-  }
-
-  const result = await addTransaction(
-    parsed.kind,
-    parsed.amount,
-    parsed.category,
-    '',
-    parsed.wallet
-  );
-
-  if (!result.success) {
-    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
-    return;
-  }
-
-  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
-  const balances = await getBalance();
-
-  const walletBalance = balances[parsed.wallet] || 0;
-  const totalMain =
-  (balances.карта || 0) +
-  (balances.наличка || 0) +
-  (balances.депозит || 0) +
-  (balances.зарубежная_карта || 0) +
-  (balances.долги || 0);
-
-  const message =
-    `Операция прошла успешно ✅\n\n` +
-    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
-    `Кошелёк: #${parsed.wallet}\n\n` +
-    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ₽\n` +
-    `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
-
-  lastOperations.set(ctx.chat.id, { type: 'trans', id: result.id });
-
-  await ctx.reply(message, cancelLastKeyboard());
 }
 
-module.exports = { handleFreeInput, addTransaction, lastOperations };
+module.exports = {
+  handleTransfer
+};
