@@ -38,6 +38,7 @@ function helpText() {
     const { handleInitial } = require('./initial');
     const { handleTransfer } = require('./transfer');
     const { handleFreeInput } = require('./transaction');
+    const { handleCancelLast } = require('./cancel');
 
     // === Команды и обработчики ===
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
@@ -58,9 +59,13 @@ function helpText() {
       await ctx.answerCbQuery();
     });
 
-    // Заглушки
-    bot.action(['report', 'debtors', 'expense', 'income', 'cancel_last'], async (ctx) => {
-      await ctx.answerCbQuery('В разработке 🚧');
+  // Отмена последней операции
+bot.action('cancel_last', handleCancelLast);
+
+// Заглушки
+bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
+  await ctx.answerCbQuery('В разработке 🚧');
+});
     });
 
     // Свободный ввод
