@@ -180,6 +180,11 @@ const CATEGORY_SYNONYMS = {
   ]
 };
 
+const INCOME_CATEGORIES = [
+  'зарплата',
+  'кешбэк'
+];
+
 function normalizeText(value) {
   return String(value || '')
     .toLowerCase()
@@ -229,10 +234,18 @@ function normalizeCategory(category) {
   return value;
 }
 
+function getCategoryList() {
+  return Object.keys(CATEGORY_SYNONYMS).sort();
+}
+
 function getExpenseCategoryList() {
   return getCategoryList().filter(category => {
-    return !['зарплата', 'кешбэк'].includes(category);
+    return !INCOME_CATEGORIES.includes(category);
   });
+}
+
+function getIncomeCategoryList() {
+  return [...INCOME_CATEGORIES];
 }
 
 function isKnownCategory(category) {
@@ -240,10 +253,24 @@ function isKnownCategory(category) {
   return Object.prototype.hasOwnProperty.call(CATEGORY_SYNONYMS, normalized);
 }
 
+function isIncomeCategory(category) {
+  const normalized = normalizeCategory(category);
+  return INCOME_CATEGORIES.includes(normalized);
+}
+
+function isExpenseCategory(category) {
+  const normalized = normalizeCategory(category);
+  return isKnownCategory(normalized) && !isIncomeCategory(normalized);
+}
+
 module.exports = {
   CATEGORY_SYNONYMS,
+  INCOME_CATEGORIES,
   normalizeCategory,
   getCategoryList,
   getExpenseCategoryList,
-  isKnownCategory
+  getIncomeCategoryList,
+  isKnownCategory,
+  isIncomeCategory,
+  isExpenseCategory
 };
