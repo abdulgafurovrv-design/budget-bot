@@ -3,6 +3,7 @@ const { transactionsSheet, doc } = global;
 const { cancelLastKeyboard, mainKeyboard } = require('./keyboards');
 const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
 const { getBalance } = require('./balance');
+const { handleDebtOperation, sendDebtors } = require('./debt');
 
 const lastOperations = new Map();
 
@@ -107,37 +108,5 @@ function parseFreeInput(text) {
   return { action: 'transaction', kind, amount, category, wallet };
 }
 
-async function handleFreeInput(ctx) {
-  const text = ctx.message.text.trim();
-  const parsed = parseFreeInput(text);
-
-  if (!parsed || parsed.action !== 'transaction') {
-    await ctx.reply('Не понял ввод 😅\nПримеры:\nкофе 250\n250 кофе #карта\nзарплата 100000\n+50000 премия', mainKeyboard());
-    return;
-  }
-
-  const result = await addTransaction(parsed.kind, parsed.amount, parsed.category, '', parsed.wallet);
-
-  if (!result.success) {
-    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
-    return;
-  }
-
-  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
-  const balances = await getBalance();
-
-  const walletBalance = balances[parsed.wallet] || 0;
-  const totalMain = balances.карта + balances.наличка + balances.депозит + balances.долги;
-
-  const message = `Операция прошла успешно ✅\n\n` +
-    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
-    `Кошелёк: #${parsed.wallet}\n\n` +
-    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ₽\n` +
-    `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
-
-  lastOperations.set(ctx.chat.id, { type: 'trans', id: result.id });
-
-  await ctx.reply(message, cancelLastKeyboard());
-}
 
 module.exports = { handleFreeInput, addTransaction, lastOperations };
