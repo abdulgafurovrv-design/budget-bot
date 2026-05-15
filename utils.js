@@ -1,52 +1,174 @@
+// utils.js
+
 const DEFAULT_WALLET = 'карта';
 
-function normWallet(wallet) {
-  const w = String(wallet || '')
+const WALLET_SYNONYMS = {
+  карта: [
+    'карта',
+    'карт',
+    'к',
+    'card',
+    'bank',
+    'банк'
+  ],
+
+  наличка: [
+    'наличка',
+    'наличные',
+    'нал',
+    'кэш',
+    'кеш',
+    'cash'
+  ],
+
+  депозит: [
+    'депозит',
+    'деп',
+    'deposit',
+    'вклад'
+  ],
+
+  доллары: [
+    'доллары',
+    'доллар',
+    'дол',
+    'баксы',
+    'usd',
+    '$'
+  ],
+
+  евро: [
+    'евро',
+    'eur',
+    '€'
+  ],
+
+  зарубежная_карта: [
+    'зарубежная_карта',
+    'зарубежная карта',
+    'зарубежка',
+    'зар карта',
+    'заркарта',
+    'иностранная карта',
+    'foreign_card',
+    'foreign'
+  ]
+};
+
+function normalizeText(value) {
+  return String(value || '')
     .toLowerCase()
     .trim()
-    .replace(/^#/, '');
+    .replace(/^#/, '')
+    .replace(/\s+/g, ' ');
+}
 
-  if (['карта', 'card'].includes(w)) return 'карта';
-  if (['наличка', 'наличные', 'cash'].includes(w)) return 'наличка';
-  if (['депозит', 'deposit'].includes(w)) return 'депозит';
-  if (['евро', 'eur', 'euro'].includes(w)) return 'евро';
-  if (['доллары', 'доллар', 'usd', 'dollar'].includes(w)) return 'доллары';
+function normWallet(wallet) {
+  const w = normalizeText(wallet);
 
-  if (
-    [
-      'зарубежная карта',
-      'зарубежная_карта',
-      'заркарт',
-      'заркарта',
-      'foreign_card',
-      'foreign'
-    ].includes(w)
-  ) return 'зарубежная_карта';
+  for (const [walletName, synonyms] of Object.entries(WALLET_SYNONYMS)) {
+    if (synonyms.includes(w)) {
+      return walletName;
+    }
+  }
 
   return DEFAULT_WALLET;
 }
 
+function findWalletAtEnd(text) {
+  const source = String(text || '').trim();
+
+  const candidates = [];
+
+  for (const [walletName, synonyms] of Object.entries(WALLET_SYNONYMS)) {
+    synonyms.forEach(synonym => {
+      candidates.push({
+        wallet: walletName,
+        synonym
+      });
+    });
+  }
+
+  // Сначала проверяем длинные варианты, чтобы "зарубежная карта"
+  // нашлась раньше, чем просто "карта"
+  candidates.sort((a, b) => b.synonym.length - a.synonym.length);
+
+  for (const candidate of candidates) {
+    const escaped = candidate.synonym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+    const regex = new RegExp(`(?:^|\\s)(${escaped})$`, 'i');
+
+    if (regex.test(source)) {
+      const cleaned = source.replace(regex, '').trim();
+
+      return {
+        wallet: candidate.wallet,
+        cleaned
+      };
+    }
+  }
+
+  return null;
+}
+
 function extractWallet(text) {
-  const str = String(text || '');
+  const source = String(text || '').trim();
 
-  const walletMatch = str.match(/#([а-яА-ЯёЁa-zA-Z0-9_ ]+)/);
+  // 1. Сначала ищем кошелёк через #
+  // Примеры:
+  // кофе 300 #нал
+  // кофе 300 #наличка
+  // кофе 300 #зарубежная_карта
+  const hashMatch = source.match(/#([а-яА-ЯёЁa-zA-Z0-9_ ]+)$/);
 
-  if (!walletMatch) {
+  if (hashMatch) {
+    const rawWallet = hashMatch[1].trim();
+    const wallet = normWallet(rawWallet);
+    const cleaned = source.replace(hashMatch[0], '').trim();
+
     return {
-      wallet: DEFAULT_WALLET,
-      cleaned: str
+      wallet,
+      cleaned
     };
   }
 
-  const rawWallet = walletMatch[1].trim();
-  const wallet = normWallet(rawWallet);
-  const cleaned = str.replace(walletMatch[0], '').trim();
+  // 2. Потом ищем кошелёк последним словом/словами без #
+  // Примеры:
+  // кофе 300 нал
+  // кофе 300 наличка
+  // кофе 300 карта
+  // кофе 300 зарубежная карта
+  const walletAtEnd = findWalletAtEnd(source);
 
-  return { wallet, cleaned };
+  if (walletAtEnd) {
+    return walletAtEnd;
+  }
+
+  // 3. Если кошелёк не указан — карта по умолчанию
+  return {
+    wallet: DEFAULT_WALLET,
+    cleaned: source
+  };
+}
+
+function walletCurrency(wallet) {
+  const w = normWallet(wallet);
+
+  if (w === 'доллары' || w === 'зарубежная_карта') {
+    return '$';
+  }
+
+  if (w === 'евро') {
+    return '€';
+  }
+
+  return '₽';
 }
 
 module.exports = {
   DEFAULT_WALLET,
+  WALLET_SYNONYMS,
   normWallet,
-  extractWallet
+  extractWallet,
+  walletCurrency
 };
