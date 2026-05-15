@@ -68,14 +68,21 @@ async function handleInitial(ctx) {
 
     const balancesAfter = await getBalance();
 
-    return ctx.reply(
-      `Остаток актуализирован ✅\n\n` +
-      `Кошелёк: #${wallet}\n` +
-      `Было: ${currentAmount.toFixed(2)}\n` +
-      `Стало: ${balancesAfter[wallet].toFixed(2)}\n` +
-      `Корректировка: ${correctionAmount.toFixed(2)}`,
-      menuKeyboard()
-    );
+   const currency =
+  wallet === 'зарубежная_карта' || wallet === 'доллары'
+    ? '$'
+    : wallet === 'евро'
+      ? '€'
+      : '₽';
+
+return ctx.reply(
+  `Остаток актуализирован ✅\n\n` +
+  `Кошелёк: #${wallet}\n` +
+  `Было: ${currentAmount.toFixed(2)} ${currency}\n` +
+  `Стало: ${balancesAfter[wallet].toFixed(2)} ${currency}\n` +
+  `Корректировка: ${correctionAmount.toFixed(2)} ${currency}`,
+  menuKeyboard()
+);
 
   } catch (error) {
     console.error('Ошибка установки остатка:', error);
