@@ -7,12 +7,16 @@ function mainKeyboard() {
       Markup.button.callback('Отчёт', 'report')
     ],
     [
-      Markup.button.callback('Должники', 'debtors'),
-      Markup.button.callback('Перевод', 'transfer')
+      Markup.button.callback('Бюджеты', 'budgets'),
+      Markup.button.callback('Должники', 'debtors')
     ],
     [
-      Markup.button.callback('Расход +', 'expense'),
-      Markup.button.callback('Доход +', 'income')
+      Markup.button.callback('Перевод', 'transfer'),
+      Markup.button.callback('Обмен', 'exchange_help')
+    ],
+    [
+      Markup.button.callback('Расход +', 'add_expense'),
+      Markup.button.callback('Доход +', 'add_income')
     ]
   ]);
 }
