@@ -49,13 +49,14 @@ function helpText() {
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
 
-    // === Команды ===
-    bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
-    bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
+ // === Команды ===
+bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
+bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 
-    bot.command('баланс', sendBalance);
-    bot.command('остаток', handleInitial);
-    bot.command('перевод', handleTransfer);
+// Кириллические команды ловим как текст, чтобы они не уходили в свободный ввод
+bot.hears(/^\/?баланс$/i, sendBalance);
+bot.hears(/^\/?остаток\s+/i, handleInitial);
+bot.hears(/^\/?перевод\s+/i, handleTransfer);
 
     // === Кнопки ===
     bot.action('balance', sendBalance);
