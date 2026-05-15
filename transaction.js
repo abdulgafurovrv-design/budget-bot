@@ -107,4 +107,69 @@ function parseFreeInput(text) {
 
   return { action: 'transaction', kind, amount, category, wallet };
 }
+
+async function handleFreeInput(ctx) {
+  const text = ctx.message.text.trim();
+
+  if (/^долги$/i.test(text) || /^должники$/i.test(text)) {
+    return sendDebtors(ctx);
+  }
+
+  const parsed = parseFreeInput(text);
+
+  if (!parsed) {
+    await ctx.reply(
+      'Не понял ввод 😅\n\n' +
+      'Примеры расходов и доходов:\n' +
+      'кофе 250\n' +
+      '250 кофе #карта\n' +
+      '+50000 зарплата\n\n' +
+      'Примеры долгов:\n' +
+      'дал Саша 5000 #карта\n' +
+      'вернули Саша 2000 #карта\n' +
+      'добавить долг Саша 10000',
+      mainKeyboard()
+    );
+    return;
+  }
+
+  if (parsed.action !== 'transaction') {
+    return handleDebtOperation(ctx, parsed);
+  }
+
+  const result = await addTransaction(
+    parsed.kind,
+    parsed.amount,
+    parsed.category,
+    '',
+    parsed.wallet
+  );
+
+  if (!result.success) {
+    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
+    return;
+  }
+
+  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
+  const balances = await getBalance();
+
+  const walletBalance = balances[parsed.wallet] || 0;
+  const totalMain =
+    (balances.карта || 0) +
+    (balances.наличка || 0) +
+    (balances.депозит || 0) +
+    (balances.долги || 0);
+
+  const message =
+    `Операция прошла успешно ✅\n\n` +
+    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
+    `Кошелёк: #${parsed.wallet}\n\n` +
+    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ₽\n` +
+    `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
+
+  lastOperations.set(ctx.chat.id, { type: 'trans', id: result.id });
+
+  await ctx.reply(message, cancelLastKeyboard());
+}
+
 module.exports = { handleFreeInput, addTransaction, lastOperations };
