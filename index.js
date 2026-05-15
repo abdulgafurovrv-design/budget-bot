@@ -23,6 +23,7 @@ function helpText() {
 
 Доступно:
 • Баланс
+• Бюджеты по категориям
 • Начальный остаток
 • Перевод
 • Обмен валюты
@@ -35,15 +36,30 @@ function helpText() {
 • Сигареты 299 нал
 • Кофе 10 зарубежка
 • +10000 зарплата
+
+Остатки:
 • /остаток карта 100000
 • /остаток зарубежная_карта 1000
+
+Переводы и обмен:
 • /перевод карта депозит 50000
+• /перевод доллары зарубежная_карта 100
 • /обмен карта зарубежная_карта 9000 100
+
+Долги:
 • дал Саша 5000 #карта
 • вернули Саша 2000 #карта
 • добавить долг Саша 10000
+
+Бюджеты:
+• /бюджет кафе 15000
+• /бюджет продукты 60000
+• /бюджеты
+
+Отчёты:
 • отчёт
 • месяц
+• /report_now
 
 Нажми кнопки 👇`;
 }
@@ -69,16 +85,16 @@ function isCancelText(text) {
     console.log('Sheets инициализированы, подключаем модули функционала');
 
     // === Подключаем модули после инициализации sheets ===
-  const { sendBalance } = require('./balance');
-const { handleInitial } = require('./initial');
-const { handleTransfer } = require('./transfer');
-const { handleExchange } = require('./exchange');
-const { handleFreeInput } = require('./transaction');
-const { handleCancelLast } = require('./cancel');
-const { sendDebtors } = require('./debt');
-const { sendTodayReport, sendMonthReport } = require('./report');
-const { handleSetBudget, sendBudgets } = require('./budgets');
-const { startAutoReport } = require('./autoReport');
+    const { sendBalance } = require('./balance');
+    const { handleInitial } = require('./initial');
+    const { handleTransfer } = require('./transfer');
+    const { handleExchange } = require('./exchange');
+    const { handleFreeInput } = require('./transaction');
+    const { handleCancelLast } = require('./cancel');
+    const { sendDebtors } = require('./debt');
+    const { sendTodayReport, sendMonthReport } = require('./report');
+    const { handleSetBudget, sendBudgets } = require('./budgets');
+    const { startAutoReport } = require('./autoReport');
 
     console.log('DEBUG handlers:', {
       sendBalance: typeof sendBalance,
@@ -90,6 +106,8 @@ const { startAutoReport } = require('./autoReport');
       sendDebtors: typeof sendDebtors,
       sendTodayReport: typeof sendTodayReport,
       sendMonthReport: typeof sendMonthReport,
+      handleSetBudget: typeof handleSetBudget,
+      sendBudgets: typeof sendBudgets,
       startAutoReport: typeof startAutoReport
     });
 
@@ -99,7 +117,9 @@ const { startAutoReport } = require('./autoReport');
       return ctx.replyWithHTML(helpText(), mainKeyboard());
     });
 
-    bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
+    bot.help((ctx) => {
+      return ctx.replyWithHTML(helpText(), mainKeyboard());
+    });
 
     // Кириллические команды ловим как текст, чтобы они не уходили в свободный ввод
     bot.hears(/^\/?баланс$/i, sendBalance);
@@ -112,17 +132,16 @@ const { startAutoReport } = require('./autoReport');
     bot.hears(/^\/?(report_now|отчет сейчас|отчёт сейчас)$/i, sendTodayReport);
 
     bot.hears(/^\/?бюджет\s+/i, handleSetBudget);
-bot.hears(/^\/?(бюджеты|лимиты)$/i, sendBudgets);
-    
+    bot.hears(/^\/?(бюджеты|лимиты)$/i, sendBudgets);
 
     // === Автоотчёт каждый день в 23:59 ===
     startAutoReport(bot);
 
-    // === Кнопки ===
-   bot.action('balance', sendBalance);
-bot.action('debtors', sendDebtors);
-bot.action('report', sendTodayReport);
-bot.action('budgets', sendBudgets);
+    // === Кнопки главного меню ===
+    bot.action('balance', sendBalance);
+    bot.action('debtors', sendDebtors);
+    bot.action('report', sendTodayReport);
+    bot.action('budgets', sendBudgets);
 
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
@@ -132,13 +151,30 @@ bot.action('budgets', sendBudgets);
         '/перевод <от_кошелька> <к_кошельку> <сумма>\n\n' +
         'Примеры:\n' +
         '/перевод карта депозит 50000\n' +
-        '/перевод доллары зарубежная_карта 100',
+        '/перевод доллары зарубежная_карта 100\n' +
+        '/перевод зарубежная_карта доллары 50',
+        menuKeyboard()
+      );
+    });
+
+    bot.action('exchange_help', async (ctx) => {
+      await ctx.answerCbQuery();
+
+      await ctx.reply(
+        'Используй команду:\n' +
+        '/обмен <откуда> <куда> <сумма_списания> <сумма_зачисления>\n\n' +
+        'Примеры:\n' +
+        '/обмен карта зарубежная_карта 9000 100\n' +
+        '/обмен зарубежная_карта карта 100 9200\n' +
+        '/обмен карта доллары 9200 100',
         menuKeyboard()
       );
     });
 
     // === Кнопка Расход + ===
-    bot.action('expense', async (ctx) => {
+    // Поддерживаем новый callback add_expense и старый expense,
+    // чтобы старые сообщения с кнопками тоже не ломались.
+    bot.action(['add_expense', 'expense'], async (ctx) => {
       await ctx.answerCbQuery();
 
       pendingModes.set(ctx.chat.id, 'expense');
@@ -156,7 +192,8 @@ bot.action('budgets', sendBudgets);
     });
 
     // === Кнопка Доход + ===
-    bot.action('income', async (ctx) => {
+    // Поддерживаем новый callback add_income и старый income.
+    bot.action(['add_income', 'income'], async (ctx) => {
       await ctx.answerCbQuery();
 
       pendingModes.set(ctx.chat.id, 'income');
