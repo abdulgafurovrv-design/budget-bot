@@ -1,5 +1,5 @@
 // debt.js
-const { menuKeyboard } = require('./keyboards');
+const { menuKeyboard, cancelLastKeyboard } = require('./keyboards');
 const { getBalance } = require('./balance');
 const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
 
@@ -140,7 +140,7 @@ async function handleDebtOperation(ctx, parsed) {
     if (!debtor || !amount || amount <= 0) {
       return ctx.reply(
         'Не понял долг 😅\n\nПримеры:\nдал Саша 5000 #карта\nвернули Саша 2000 #карта\nдобавить долг Саша 10000',
-        menuKeyboard()
+         cancelLastKeyboard()
       );
     }
 
@@ -189,7 +189,7 @@ if (global.lastOperations) {
         `Кошелёк: #${wallet}\n\n` +
         `Текущий баланс кошелька: ${balances[wallet].toFixed(2)} ₽\n` +
         `Итого долгов: ${balances.долги.toFixed(2)} ₽`,
-        menuKeyboard()
+         cancelLastKeyboard()
       );
     }
 
@@ -229,7 +229,7 @@ if (global.lastOperations) {
         `Кошелёк: #${wallet}\n\n` +
         `Текущий баланс кошелька: ${balances[wallet].toFixed(2)} ₽\n` +
         `Итого долгов: ${balances.долги.toFixed(2)} ₽`,
-        menuKeyboard()
+         cancelLastKeyboard()
       );
     }
 
