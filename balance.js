@@ -59,11 +59,12 @@ async function getBalance() {
     return sum + (amount > 0 ? amount : 0);
   }, 0);
 
+  // Основной итог считаем только в рублях
+  // Зарубежная карта, доллары и евро сюда не входят
   balances.totalMain =
     balances.карта +
     balances.наличка +
     balances.депозит +
-    balances.зарубежная_карта +
     balances.долги;
 
   return balances;
@@ -74,16 +75,18 @@ async function sendBalance(ctx) {
 
   let msg = '<b>Баланс по кошелькам:</b>\n\n';
 
+  msg += '<b>Рубли:</b>\n';
   msg += `• Карта: ${balances.карта.toFixed(2)} ₽\n`;
   msg += `• Наличка: ${balances.наличка.toFixed(2)} ₽\n`;
   msg += `• Депозит: ${balances.депозит.toFixed(2)} ₽\n`;
-  msg += `• Зарубежная карта: ${balances.зарубежная_карта.toFixed(2)} ₽\n`;
   msg += `• Долги: ${balances.долги.toFixed(2)} ₽\n`;
 
-  msg += `\n• Евро: ${balances.евро.toFixed(2)} ₽\n`;
-  msg += `• Доллары: ${balances.доллары.toFixed(2)} ₽\n`;
+  msg += `\n<b>ИТОГ ₽:</b> ${balances.totalMain.toFixed(2)} ₽\n`;
 
-  msg += `\n<b>ИТОГ (основные):</b> ${balances.totalMain.toFixed(2)} ₽`;
+  msg += '\n<b>Валюта:</b>\n';
+  msg += `• Зарубежная карта: ${balances.зарубежная_карта.toFixed(2)} $\n`;
+  msg += `• Доллары: ${balances.доллары.toFixed(2)} $\n`;
+  msg += `• Евро: ${balances.евро.toFixed(2)} €`;
 
   const keyboard = ctx.callbackQuery ? menuKeyboard() : mainKeyboard();
 
