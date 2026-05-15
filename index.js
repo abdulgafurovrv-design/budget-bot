@@ -119,9 +119,10 @@ bot.hears(/^\/?(бюджеты|лимиты)$/i, sendBudgets);
     startAutoReport(bot);
 
     // === Кнопки ===
-    bot.action('balance', sendBalance);
-    bot.action('debtors', sendDebtors);
-    bot.action('report', sendTodayReport);
+   bot.action('balance', sendBalance);
+bot.action('debtors', sendDebtors);
+bot.action('report', sendTodayReport);
+bot.action('budgets', sendBudgets);
 
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
