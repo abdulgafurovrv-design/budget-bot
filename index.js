@@ -5,14 +5,14 @@ const BOT_TOKEN = '8269910739:AAEywu7dOX8WB9TDG6y8WH-fAoV5_foRhzU';
 
 const bot = new Telegraf(BOT_TOKEN);
 const app = express();
+
 app.use(express.json());
 
-// === 1. Сначала инициализируем Google Sheets (асинхронно) ===
-const initSheets = require('./sheets'); // sheets.js возвращает промис
+// === 1. Сначала инициализируем Google Sheets ===
+const initSheets = require('./sheets');
 
-// === 2. Клавиатуры и утилиты (синхронные) ===
-const { mainKeyboard, menuKeyboard, cancelLastKeyboard } = require('./keyboards');
-const { normWallet } = require('./utils');
+// === 2. Клавиатуры и утилиты ===
+const { mainKeyboard, menuKeyboard } = require('./keyboards');
 
 // === Приветствие ===
 function helpText() {
@@ -24,23 +24,31 @@ function helpText() {
 • Перевод (/перевод)
 • Свободный ввод расходов и доходов
 
+Примеры:
+• Кофе 290
+• Сигареты 299
+• +10000 зарплата
+• /остаток карта 100000
+• /перевод карта депозит 50000
+
 Нажми кнопки 👇`;
 }
 
 // === Запуск после инициализации Sheets ===
 (async () => {
   try {
-    await initSheets; // ЖДЁМ, пока таблицы полностью инициализированы
+    await initSheets;
+
     console.log('Sheets инициализированы, подключаем модули функционала');
 
-    // === 3. Теперь подключаем модули, зависящие от global.transactionsSheet ===
+    // === Подключаем модули после инициализации sheets ===
     const { sendBalance } = require('./balance');
     const { handleInitial } = require('./initial');
     const { handleTransfer } = require('./transfer');
     const { handleFreeInput } = require('./transaction');
     const { handleCancelLast } = require('./cancel');
 
-    // === Команды и обработчики ===
+    // === Команды ===
     bot.start((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
     bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 
@@ -48,43 +56,61 @@ function helpText() {
     bot.command('остаток', handleInitial);
     bot.command('перевод', handleTransfer);
 
+    // === Кнопки ===
     bot.action('balance', sendBalance);
+
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
-      await ctx.reply('Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\nПример: /перевод карта депозит 50000', menuKeyboard());
+      await ctx.reply(
+        'Используй команду:\n/перевод <от_кошелька> <к_кошельку> <сумма>\n\nПример:\n/перевод карта депозит 50000',
+        menuKeyboard()
+      );
     });
 
     bot.action('menu', async (ctx) => {
-      await ctx.editMessageText(helpText(), { reply_markup: mainKeyboard().reply_markup });
       await ctx.answerCbQuery();
+
+      try {
+        await ctx.editMessageText(helpText(), {
+          parse_mode: 'HTML',
+          reply_markup: mainKeyboard().reply_markup
+        });
+      } catch (error) {
+        await ctx.replyWithHTML(helpText(), mainKeyboard());
+      }
     });
 
-  // Отмена последней операции
-bot.action('cancel_last', handleCancelLast);
+    // === Отмена последней операции ===
+    bot.action('cancel_last', handleCancelLast);
 
-// Заглушки
-bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
-  await ctx.answerCbQuery('В разработке 🚧');
-});
+    // === Пока заглушки ===
+    bot.action(['report', 'debtors', 'expense', 'income'], async (ctx) => {
+      await ctx.answerCbQuery('В разработке 🚧');
     });
 
-    // Свободный ввод
+    // === Свободный ввод ===
     bot.on('text', handleFreeInput);
 
+    // === Глобальная обработка ошибок бота ===
     bot.catch((err) => {
       console.error('Bot error:', err);
     });
 
-    // Webhook
+    // === Webhook ===
     app.use(bot.webhookCallback(`/bot${BOT_TOKEN}`));
-    app.get('/', (req, res) => res.send('Бюджет-бот работает! 🚀'));
+
+    app.get('/', (req, res) => {
+      res.send('Бюджет-бот работает! 🚀');
+    });
 
     const PORT = process.env.PORT || 3000;
+
     app.listen(PORT, '0.0.0.0', () => {
       console.log(`Сервер запущен на порту ${PORT}`);
     });
 
   } catch (error) {
     console.error('Критическая ошибка запуска:', error);
+    process.exit(1);
   }
 })();
