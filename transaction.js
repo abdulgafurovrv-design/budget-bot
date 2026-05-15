@@ -6,6 +6,7 @@ const { getBalance } = require('./balance');
 const { handleDebtOperation, sendDebtors } = require('./debt');
 
 const lastOperations = new Map();
+global.lastOperations = lastOperations;
 
 async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
   try {
