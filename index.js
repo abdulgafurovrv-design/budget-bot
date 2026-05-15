@@ -48,6 +48,7 @@ function helpText() {
     const { handleFreeInput } = require('./transaction');
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
+    const { sendTodayReport, sendMonthReport } = require('./report');
 
     console.log('DEBUG handlers:', {
   sendBalance: typeof sendBalance,
@@ -66,6 +67,8 @@ bot.help((ctx) => ctx.replyWithHTML(helpText(), mainKeyboard()));
 bot.hears(/^\/?баланс$/i, sendBalance);
 bot.hears(/^\/?остаток\s+/i, handleInitial);
 bot.hears(/^\/?перевод\s+/i, handleTransfer);
+    bot.hears(/^\/?(отчет|отчёт|сегодня)$/i, sendTodayReport);
+bot.hears(/^\/?(месяц|отчет месяц|отчёт месяц)$/i, sendMonthReport);
 
     // === Кнопки ===
     bot.action('balance', sendBalance);
@@ -95,9 +98,10 @@ bot.hears(/^\/?перевод\s+/i, handleTransfer);
     bot.action('cancel_last', handleCancelLast);
 
     // === Пока заглушки ===
-   bot.action('debtors', sendDebtors);
-    
-   bot.action(['report', 'expense', 'income'], async (ctx) => {
+  bot.action('debtors', sendDebtors);
+bot.action('report', sendTodayReport);
+
+bot.action(['expense', 'income'], async (ctx) => {
   await ctx.answerCbQuery('В разработке 🚧');
 });
 
