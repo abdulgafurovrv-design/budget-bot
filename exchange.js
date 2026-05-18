@@ -1,7 +1,7 @@
 // exchange.js
 const { transactionsSheet, doc } = global;
 const { menuKeyboard, cancelLastKeyboard } = require('./keyboards');
-const { normWallet, walletCurrency } = require('./utils');
+const { normWallet, walletCurrency, parseSheetNumber } = require('./utils');
 const { getBalance } = require('./balance');
 
 const ALLOWED_WALLETS = [
@@ -31,7 +31,7 @@ async function getNextTransactionId() {
 }
 
 function parseAmount(value) {
-  return Number(String(value || '').replace(',', '.'));
+  return parseSheetNumber(value, NaN);
 }
 
 async function handleExchange(ctx) {
@@ -51,8 +51,8 @@ async function handleExchange(ctx) {
       );
     }
 
-    const fromWallet = normWallet(parts[1]);
-    const toWallet = normWallet(parts[2]);
+    const fromWallet = normWallet(parts[1], null);
+    const toWallet = normWallet(parts[2], null);
     const fromAmount = parseAmount(parts[3]);
     const toAmount = parseAmount(parts[4]);
 

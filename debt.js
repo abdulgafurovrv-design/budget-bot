@@ -1,7 +1,7 @@
 // debt.js
 const { menuKeyboard, cancelLastKeyboard } = require('./keyboards');
 const { getBalance } = require('./balance');
-const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
+const { normWallet, extractWallet, DEFAULT_WALLET, parseSheetNumber } = require('./utils');
 
 const ALLOWED_WALLETS = [
   'карта',
@@ -20,7 +20,7 @@ function normalizeName(name) {
 }
 
 function parseAmount(value) {
-  return Number(String(value || '').replace(',', '.'));
+  return parseSheetNumber(value, NaN);
 }
 
 async function getNextTransactionId() {
@@ -95,7 +95,7 @@ async function sendDebtors(ctx) {
 
     rows.forEach(row => {
       const debtor = normalizeName(row.get('Должник'));
-      const amount = Number(row.get('Сумма')) || 0;
+      const amount = parseSheetNumber(row.get('Сумма'));
 
       if (!debtor) return;
 
@@ -162,6 +162,15 @@ async function handleDebtOperation(ctx, parsed) {
 
     const rawComment = parsed.comment || '';
     const walletData = extractWallet(rawComment);
+
+    if (walletData.unknownWallet) {
+      return ctx.reply(
+        `Неизвестный кошелёк: ${walletData.unknownWallet}\n\n` +
+        `Поддерживаемые кошельки: ${ALLOWED_WALLETS.join(', ')}`,
+        menuKeyboard()
+      );
+    }
+
     const wallet = normWallet(walletData.wallet || DEFAULT_WALLET);
     const comment = walletData.cleaned || '';
 

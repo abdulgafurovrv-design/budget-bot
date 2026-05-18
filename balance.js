@@ -1,7 +1,7 @@
 // balance.js
 const { transactionsSheet, debtsSheet, doc } = global;
 const { mainKeyboard, menuKeyboard } = require('./keyboards');
-const { normWallet } = require('./utils');
+const { normWallet, parseSheetNumber } = require('./utils');
 const { formatMoney } = require('./formatters');
 
 async function getBalance() {
@@ -21,8 +21,10 @@ async function getBalance() {
   };
 
   transRows.forEach(row => {
-    const wallet = normWallet(row.get('Кошелёк') || 'карта');
-    const amount = Number(row.get('Сумма')) || 0;
+    const rawWallet = row.get('Кошелёк');
+    const wallet = normWallet(rawWallet, rawWallet ? null : 'карта');
+    const amount = parseSheetNumber(row.get('Сумма'));
+
 
     if (!Object.prototype.hasOwnProperty.call(balances, wallet)) {
       return;
@@ -43,7 +45,7 @@ async function getBalance() {
 
   debtRows.forEach(row => {
     const debtor = String(row.get('Должник') || '').trim();
-    const amount = Number(row.get('Сумма')) || 0;
+    const amount = parseSheetNumber(row.get('Сумма'));
 
     if (!debtor) {
       return;

@@ -6,7 +6,7 @@ const {
   getExpenseCategoryList,
   isIncomeCategory
 } = require('./categories');
-const { walletCurrency } = require('./utils');
+const { normWallet, walletCurrency, parseSheetNumber } = require('./utils');
 const {
   categoryIcon,
   formatMoney,
@@ -56,7 +56,13 @@ function isSameMonth(dateA, dateB) {
 }
 
 function parseAmount(value) {
-  return Number(String(value || '').replace(',', '.'));
+  return parseSheetNumber(value, NaN);
+}
+
+function clearPendingBudgetInput(chatId) {
+  if (chatId) {
+    pendingBudgetInputs.delete(chatId);
+  }
 }
 
 async function getBudgetRows() {
@@ -124,8 +130,12 @@ async function getCategorySpent(category, currency = '₽', monthDate = new Date
 
     const type = String(row.get('Тип') || '').toLowerCase();
     const rowCategory = normalizeCategory(row.get('Категория'));
-    const amount = Number(row.get('Сумма')) || 0;
-    const wallet = row.get('Кошелёк') || 'карта';
+    const amount = parseSheetNumber(row.get('Сумма'));
+    const rawWallet = row.get('Кошелёк');
+    const wallet = normWallet(rawWallet, rawWallet ? null : 'карта');
+
+    if (!wallet) return;
+
     const rowCurrency = walletCurrency(wallet);
 
     if (rowCurrency !== currency) return;
@@ -301,6 +311,8 @@ async function sendBudgets(ctx) {
       await ctx.answerCbQuery();
     }
 
+    clearPendingBudgetInput(ctx.chat && ctx.chat.id);
+
     const monthKey = getCurrentMonthKey();
     const rows = await getBudgetRows();
 
@@ -311,7 +323,7 @@ async function sendBudgets(ctx) {
 
         return {
           category,
-          limit: Number(r.get('Лимит')) || 0,
+          limit: parseSheetNumber(r.get('Лимит')),
           currency: String(r.get('Валюта') || '₽').trim()
         };
       })
@@ -380,6 +392,7 @@ async function sendBudgets(ctx) {
 async function showBudgetCategories(ctx) {
   try {
     await ctx.answerCbQuery();
+    clearPendingBudgetInput(ctx.chat && ctx.chat.id);
 
     return ctx.reply(
       'Выбери категорию, для которой нужно добавить или изменить бюджет:',
@@ -511,5 +524,6 @@ module.exports = {
   showBudgetCategories,
   handleBudgetCategorySelected,
   handleBudgetCancel,
-  handleBudgetAmountInput
+  handleBudgetAmountInput,
+  clearPendingBudgetInput
 };

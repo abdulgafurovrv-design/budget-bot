@@ -1,7 +1,7 @@
 // transaction.js
 const { Markup } = require('telegraf');
 const { cancelLastKeyboard, mainKeyboard, menuKeyboard } = require('./keyboards');
-const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
+const { normWallet, extractWallet, DEFAULT_WALLET, WALLET_SYNONYMS } = require('./utils');
 const { getBalance } = require('./balance');
 const { handleDebtOperation, sendDebtors } = require('./debt');
 const {
@@ -210,6 +210,14 @@ function parseFreeInput(text) {
   // кофе 250 #зарубежная_карта
   // +50000 зарплата
   const walletData = extractWallet(text);
+
+  if (walletData.unknownWallet) {
+    return {
+      action: 'unknown_wallet',
+      wallet: walletData.unknownWallet
+    };
+  }
+
   const wallet = normWallet(walletData.wallet || DEFAULT_WALLET);
   const cleaned = walletData.cleaned.trim();
 
@@ -374,6 +382,14 @@ async function handleFreeInput(ctx) {
       mainKeyboard()
     );
     return;
+  }
+
+  if (parsed.action === 'unknown_wallet') {
+    return ctx.reply(
+      `Неизвестный кошелёк: ${parsed.wallet}\n\n` +
+      `Доступные кошельки: ${Object.keys(WALLET_SYNONYMS).join(', ')}`,
+      menuKeyboard()
+    );
   }
 
   if (parsed.action !== 'transaction') {

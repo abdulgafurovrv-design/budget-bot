@@ -60,19 +60,64 @@ function normalizeText(value) {
     .toLowerCase()
     .trim()
     .replace(/^#/, '')
+    .replace(/ё/g, 'е')
     .replace(/\s+/g, ' ');
 }
 
-function normWallet(wallet) {
+function findWalletName(wallet) {
   const w = normalizeText(wallet);
 
+  if (!w) {
+    return null;
+  }
+
   for (const [walletName, synonyms] of Object.entries(WALLET_SYNONYMS)) {
-    if (synonyms.includes(w)) {
+    if (synonyms.map(normalizeText).includes(w)) {
       return walletName;
     }
   }
 
-  return DEFAULT_WALLET;
+  return null;
+}
+
+function normWallet(wallet, fallback = DEFAULT_WALLET) {
+  return findWalletName(wallet) || fallback;
+}
+
+function parseSheetNumber(value, fallback = 0) {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+
+  let str = String(value ?? '')
+    .trim()
+    .replace(/\u00a0/g, ' ')
+    .replace(/[₽$€]/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[^0-9,.-]/g, '');
+
+  if (!str) {
+    return fallback;
+  }
+
+  const commaIndex = str.lastIndexOf(',');
+  const dotIndex = str.lastIndexOf('.');
+
+  if (commaIndex !== -1 && dotIndex !== -1) {
+    if (commaIndex > dotIndex) {
+      // Формат 1.234,56
+      str = str.replace(/\./g, '').replace(',', '.');
+    } else {
+      // Формат 1,234.56
+      str = str.replace(/,/g, '');
+    }
+  } else if (commaIndex !== -1) {
+    // Формат 1234,56
+    str = str.replace(',', '.');
+  }
+
+  const num = Number(str);
+  return Number.isFinite(num) ? num : fallback;
 }
 
 function findWalletAtEnd(text) {
@@ -123,12 +168,13 @@ function extractWallet(text) {
 
   if (hashMatch) {
     const rawWallet = hashMatch[1].trim();
-    const wallet = normWallet(rawWallet);
+    const wallet = normWallet(rawWallet, null);
     const cleaned = source.replace(hashMatch[0], '').trim();
 
     return {
-      wallet,
-      cleaned
+      wallet: wallet || DEFAULT_WALLET,
+      cleaned,
+      unknownWallet: wallet ? '' : rawWallet
     };
   }
 
@@ -168,7 +214,9 @@ function walletCurrency(wallet) {
 module.exports = {
   DEFAULT_WALLET,
   WALLET_SYNONYMS,
+  findWalletName,
   normWallet,
   extractWallet,
-  walletCurrency
+  walletCurrency,
+  parseSheetNumber
 };

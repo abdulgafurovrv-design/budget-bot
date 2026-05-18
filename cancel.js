@@ -1,6 +1,7 @@
 const { menuKeyboard } = require('./keyboards');
 const { getBalance } = require('./balance');
 const { lastOperations } = require('./transaction');
+const { parseSheetNumber } = require('./utils');
 
 async function deleteRowsByIds(sheet, ids) {
   if (!ids || ids.length === 0) return [];
@@ -15,7 +16,7 @@ async function deleteRowsByIds(sheet, ids) {
       deleted.push({
         id,
         type: row.get('Тип') || '',
-        amount: Number(row.get('Сумма')) || 0,
+        amount: parseSheetNumber(row.get('Сумма')),
         category: row.get('Категория') || '',
         wallet: row.get('Кошелёк') || '',
         debtor: row.get('Должник') || ''

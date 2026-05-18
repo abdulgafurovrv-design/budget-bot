@@ -99,7 +99,8 @@ function isCancelText(text) {
   showBudgetCategories,
   handleBudgetCategorySelected,
   handleBudgetCancel,
-  handleBudgetAmountInput
+  handleBudgetAmountInput,
+  clearPendingBudgetInput
 } = require('./budgets');
     const { startAutoReport } = require('./autoReport');
 
@@ -121,10 +122,13 @@ function isCancelText(text) {
     // === Команды ===
     bot.start((ctx) => {
       pendingModes.delete(ctx.chat.id);
+      clearPendingBudgetInput(ctx.chat.id);
       return ctx.replyWithHTML(helpText(), mainKeyboard());
     });
 
     bot.help((ctx) => {
+      pendingModes.delete(ctx.chat.id);
+      clearPendingBudgetInput(ctx.chat.id);
       return ctx.replyWithHTML(helpText(), mainKeyboard());
     });
 
@@ -188,6 +192,7 @@ bot.action('budget_cancel', handleBudgetCancel);
       await ctx.answerCbQuery();
 
       pendingModes.set(ctx.chat.id, 'expense');
+      clearPendingBudgetInput(ctx.chat.id);
 
       await ctx.reply(
         'Введи расход одним сообщением.\n\n' +
@@ -207,6 +212,7 @@ bot.action('budget_cancel', handleBudgetCancel);
       await ctx.answerCbQuery();
 
       pendingModes.set(ctx.chat.id, 'income');
+      clearPendingBudgetInput(ctx.chat.id);
 
       await ctx.reply(
         'Введи доход одним сообщением.\n\n' +
@@ -225,6 +231,7 @@ bot.action('budget_cancel', handleBudgetCancel);
       await ctx.answerCbQuery();
 
       pendingModes.delete(ctx.chat.id);
+      clearPendingBudgetInput(ctx.chat.id);
 
       try {
         await ctx.editMessageText(helpText(), {

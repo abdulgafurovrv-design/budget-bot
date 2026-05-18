@@ -1,7 +1,7 @@
 // report.js
 const { transactionsSheet, doc } = global;
 const { menuKeyboard } = require('./keyboards');
-const { normWallet, walletCurrency } = require('./utils');
+const { normWallet, walletCurrency, parseSheetNumber } = require('./utils');
 
 const EXCLUDED_CATEGORIES = [
   'перевод',
@@ -132,8 +132,12 @@ async function buildReport(period = 'day') {
 
     const type = String(row.get('Тип') || '').trim().toLowerCase();
     const category = normalizeCategory(row.get('Категория'));
-    const wallet = normWallet(row.get('Кошелёк') || 'карта');
-    const amount = Number(row.get('Сумма')) || 0;
+    const rawWallet = row.get('Кошелёк');
+    const wallet = normWallet(rawWallet, rawWallet ? null : 'карта');
+
+    if (!wallet) return;
+
+    const amount = parseSheetNumber(row.get('Сумма'));
 
     if (shouldExclude(category, type)) return;
     if (amount === 0) return;

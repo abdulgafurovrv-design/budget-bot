@@ -1,7 +1,7 @@
 // transfer.js
 const { transactionsSheet, doc } = global;
 const { menuKeyboard, cancelLastKeyboard } = require('./keyboards');
-const { normWallet, walletCurrency } = require('./utils');
+const { normWallet, walletCurrency, parseSheetNumber } = require('./utils');
 const { getBalance } = require('./balance');
 
 const ALLOWED_WALLETS = [
@@ -45,9 +45,9 @@ async function handleTransfer(ctx) {
       );
     }
 
-    const fromWallet = normWallet(parts[1]);
-    const toWallet = normWallet(parts[2]);
-    const amount = Number(String(parts[3]).replace(',', '.'));
+    const fromWallet = normWallet(parts[1], null);
+    const toWallet = normWallet(parts[2], null);
+    const amount = parseSheetNumber(parts[3], NaN);
 
     if (!ALLOWED_WALLETS.includes(fromWallet)) {
       return ctx.reply(

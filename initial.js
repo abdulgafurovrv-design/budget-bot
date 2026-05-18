@@ -35,7 +35,7 @@ async function handleInitial(ctx) {
       );
     }
 
-    const wallet = normWallet(match[1]);
+    const wallet = normWallet(match[1], null);
     const targetAmount = Number(String(match[2]).replace(',', '.'));
 
     if (Number.isNaN(targetAmount)) {
