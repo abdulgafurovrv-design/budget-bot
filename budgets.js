@@ -16,6 +16,10 @@ const {
 
 const pendingBudgetInputs = new Map();
 
+function clearPendingBudgetInput(chatId) {
+  pendingBudgetInputs.delete(chatId);
+}
+
 function getCurrentMonthKey(date = new Date()) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -715,5 +719,6 @@ module.exports = {
   showBudgetCategories,
   handleBudgetCategorySelected,
   handleBudgetCancel,
-  handleBudgetAmountInput
+  handleBudgetAmountInput,
+  clearPendingBudgetInput
 };
