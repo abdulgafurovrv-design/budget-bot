@@ -95,7 +95,7 @@ async function getCategoryBudget(category, currency = '₽', monthKey = getCurre
     return null;
   }
 
-  const limit = Number(row.get('Лимит')) || 0;
+  const limit = parseSheetNumber(row.get('Лимит'));
 
   if (limit <= 0) {
     return null;

@@ -8,6 +8,15 @@ const app = express();
 
 app.use(express.json());
 
+// Логируем callback-кнопки, чтобы быстро поймать старые/неправильные кнопки в Render Logs
+bot.use(async (ctx, next) => {
+  if (ctx.callbackQuery && ctx.callbackQuery.data) {
+    console.log('DEBUG CALLBACK:', ctx.callbackQuery.data);
+  }
+
+  return next();
+});
+
 // === 1. Сначала инициализируем Google Sheets ===
 const initSheets = require('./sheets');
 
@@ -152,8 +161,15 @@ function isCancelText(text) {
     bot.action('balance', sendBalance);
     bot.action('debtors', sendDebtors);
     bot.action('report', sendTodayReport);
-    bot.action('budgets', sendBudgets);
-    bot.action('budget_add', showBudgetCategories);
+    bot.action('budgets', async (ctx) => {
+      clearPendingBudgetInput(ctx.chat.id);
+      return sendBudgets(ctx);
+    });
+
+    bot.action('budget_add', async (ctx) => {
+      clearPendingBudgetInput(ctx.chat.id);
+      return showBudgetCategories(ctx);
+    });
 bot.action(/^budgetcat:/, handleBudgetCategorySelected);
 bot.action('budget_cancel', handleBudgetCancel);
 
