@@ -102,7 +102,7 @@ function isCancelText(text) {
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
     const { sendTodayReport, sendMonthReport } = require('./report');
-   const {
+ const {
   handleSetBudget,
   sendBudgets,
   showBudgetCategories,
