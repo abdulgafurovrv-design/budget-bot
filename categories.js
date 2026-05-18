@@ -1,189 +1,354 @@
 // categories.js
 
-const CATEGORY_SYNONYMS = {
-  кафе: [
-    'кофе',
-    'кафе',
-    'кофейня',
-    'капучино',
-    'латте',
-    'американо',
-    'эспрессо',
-    'ресторан',
-    'еда вне дома',
-    'бургер',
-    'шаурма'
-  ],
+const CATEGORY_DATA = {
+  кафе: {
+    synonyms: [
+      'кофе',
+      'кафе',
+      'кофейня',
+      'капучино',
+      'латте',
+      'американо',
+      'эспрессо',
+      'ресторан',
+      'еда вне дома',
+      'бургер',
+      'шаурма'
+    ],
+    subcategories: {
+      кофе: ['кофе', 'капучино', 'латте', 'американо', 'эспрессо'],
+      ресторан: ['ресторан'],
+      фастфуд: ['бургер', 'шаурма', 'фастфуд'],
+      кофейня: ['кофейня', 'кафе'],
+      доставка_еды: ['доставка еды', 'еда вне дома']
+    }
+  },
 
-  продукты: [
-    'продукты',
-    'еда',
-    'магнит',
-    'пятерочка',
-    'пятёрочка',
-    'перекресток',
-    'перекрёсток',
-    'лента',
-    'ашан',
-    'самокат',
-    'лавка',
-    'вкусвилл'
-  ],
+  продукты: {
+    synonyms: [
+      'продукты',
+      'еда',
+      'магнит',
+      'пятерочка',
+      'пятёрочка',
+      'перекресток',
+      'перекрёсток',
+      'лента',
+      'ашан',
+      'самокат',
+      'лавка',
+      'вкусвилл',
+      'рынок'
+    ],
+    subcategories: {
+      магнит: ['магнит'],
+      пятерочка: ['пятерочка', 'пятёрочка'],
+      перекресток: ['перекресток', 'перекрёсток'],
+      лента: ['лента'],
+      ашан: ['ашан'],
+      вкусвилл: ['вкусвилл'],
+      самокат: ['самокат'],
+      лавка: ['лавка'],
+      рынок: ['рынок'],
+      продукты: ['продукты', 'еда']
+    }
+  },
 
-  транспорт: [
-    'такси',
-    'яндекс такси',
-    'uber',
-    'убер',
-    'транспорт',
-    'метро',
-    'автобус',
-    'парковка',
-    'бензин',
-    'топливо'
-  ],
+  транспорт: {
+    synonyms: [
+      'такси',
+      'яндекс такси',
+      'uber',
+      'убер',
+      'транспорт',
+      'метро',
+      'автобус',
+      'парковка',
+      'бензин',
+      'топливо',
+      'мойка',
+      'ремонт авто'
+    ],
+    subcategories: {
+      такси: ['такси', 'яндекс такси', 'uber', 'убер'],
+      бензин: ['бензин', 'топливо'],
+      парковка: ['парковка'],
+      метро: ['метро'],
+      автобус: ['автобус'],
+      мойка: ['мойка'],
+      ремонт_авто: ['ремонт авто']
+    }
+  },
 
-  связь: [
-    'связь',
-    'телефон',
-    'интернет',
-    'мтс',
-    'билайн',
-    'мегафон',
-    'теле2'
-  ],
+  связь: {
+    synonyms: [
+      'связь',
+      'телефон',
+      'интернет',
+      'мтс',
+      'билайн',
+      'мегафон',
+      'теле2',
+      'подписка',
+      'подписки'
+    ],
+    subcategories: {
+      телефон: ['телефон', 'мтс', 'билайн', 'мегафон', 'теле2'],
+      интернет: ['интернет'],
+      подписки: ['подписка', 'подписки']
+    }
+  },
 
-  здоровье: [
-    'здоровье',
-    'аптека',
-    'лекарства',
-    'врач',
-    'стоматолог',
-    'анализы',
-    'витамины'
-  ],
+  здоровье: {
+    synonyms: [
+      'здоровье',
+      'аптека',
+      'лекарства',
+      'врач',
+      'стоматолог',
+      'анализы',
+      'витамины'
+    ],
+    subcategories: {
+      аптека: ['аптека', 'лекарства'],
+      врач: ['врач'],
+      стоматолог: ['стоматолог'],
+      анализы: ['анализы'],
+      витамины: ['витамины']
+    }
+  },
 
-  одежда: [
-    'одежда',
-    'обувь',
-    'магазин одежды',
-    'ламода',
-    'wb',
-    'wildberries',
-    'озон',
-    'ozon'
-  ],
+  одежда: {
+    synonyms: [
+      'одежда',
+      'обувь',
+      'магазин одежды',
+      'ламода',
+      'wb',
+      'wildberries',
+      'озон',
+      'ozon',
+      'химчистка'
+    ],
+    subcategories: {
+      одежда: ['одежда', 'магазин одежды'],
+      обувь: ['обувь'],
+      маркетплейсы: ['ламода', 'wb', 'wildberries', 'озон', 'ozon'],
+      химчистка: ['химчистка']
+    }
+  },
 
-  дом: [
-    'дом',
-    'быт',
-    'хоз',
-    'хозтовары',
-    'ремонт',
-    'мебель',
-    'посуда'
-  ],
+  дом: {
+    synonyms: [
+      'дом',
+      'быт',
+      'хоз',
+      'хозтовары',
+      'ремонт',
+      'мебель',
+      'посуда',
+      'техника'
+    ],
+    subcategories: {
+      хозтовары: ['хоз', 'хозтовары', 'быт'],
+      ремонт: ['ремонт'],
+      мебель: ['мебель'],
+      посуда: ['посуда'],
+      техника: ['техника'],
+      дом: ['дом']
+    }
+  },
 
-  жилье: [
-    'жилье',
-    'жильё',
-    'аренда',
-    'ипотека',
-    'квартира',
-    'съем',
-    'съём',
-    'съем квартиры',
-    'съём квартиры',
-    'коммуналка',
-    'жкх'
-  ],
+  жилье: {
+    synonyms: [
+      'жилье',
+      'жильё',
+      'аренда',
+      'ипотека',
+      'квартира',
+      'съем',
+      'съём',
+      'съем квартиры',
+      'съём квартиры',
+      'коммуналка',
+      'жкх'
+    ],
+    subcategories: {
+      аренда: ['аренда', 'съем', 'съём', 'съем квартиры', 'съём квартиры'],
+      ипотека: ['ипотека'],
+      жкх: ['жкх', 'коммуналка'],
+      квартира: ['квартира']
+    }
+  },
 
-  дети: [
-    'дети',
-    'ребенок',
-    'ребёнок',
-    'алименты',
-    'кружки',
-    'кружок',
-    'школа',
-    'садик',
-    'детский сад',
-    'игрушки',
-    'детская одежда',
-    'няня'
-  ],
+  дети: {
+    synonyms: [
+      'дети',
+      'ребенок',
+      'ребёнок',
+      'алименты',
+      'кружки',
+      'кружок',
+      'школа',
+      'садик',
+      'детский сад',
+      'игрушки',
+      'детская одежда',
+      'няня'
+    ],
+    subcategories: {
+      алименты: ['алименты'],
+      кружки: ['кружки', 'кружок'],
+      школа: ['школа'],
+      садик: ['садик', 'детский сад'],
+      игрушки: ['игрушки'],
+      одежда: ['детская одежда'],
+      няня: ['няня'],
+      дети: ['дети', 'ребенок', 'ребёнок']
+    }
+  },
 
-  спорт: [
-    'спорт',
-    'тренер',
-    'зал',
-    'фитнес',
-    'спортзал',
-    'абонемент',
-    'бассейн',
-    'тренировка',
-    'персоналка'
-  ],
+  спорт: {
+    synonyms: [
+      'спорт',
+      'тренер',
+      'зал',
+      'фитнес',
+      'спортзал',
+      'абонемент',
+      'бассейн',
+      'тренировка',
+      'персоналка'
+    ],
+    subcategories: {
+      тренер: ['тренер', 'персоналка'],
+      зал: ['зал', 'фитнес', 'спортзал'],
+      абонемент: ['абонемент'],
+      бассейн: ['бассейн'],
+      тренировка: ['тренировка'],
+      спорт: ['спорт']
+    }
+  },
 
-  алкоголь: [
-    'алкоголь',
-    'пиво',
-    'вино',
-    'виски',
-    'коньяк',
-    'водка',
-    'шампанское',
-    'просекко',
-    'бар'
-  ],
+  алкоголь: {
+    synonyms: [
+      'алкоголь',
+      'пиво',
+      'вино',
+      'виски',
+      'коньяк',
+      'водка',
+      'шампанское',
+      'просекко',
+      'бар'
+    ],
+    subcategories: {
+      пиво: ['пиво'],
+      вино: ['вино'],
+      крепкий_алкоголь: ['виски', 'коньяк', 'водка'],
+      шампанское: ['шампанское', 'просекко'],
+      бар: ['бар'],
+      алкоголь: ['алкоголь']
+    }
+  },
 
-  развлечения: [
-    'развлечения',
-    'кино',
-    'клуб',
-    'театр',
-    'концерт',
-    'игры'
-  ],
+  развлечения: {
+    synonyms: [
+      'развлечения',
+      'кино',
+      'клуб',
+      'театр',
+      'концерт',
+      'игры'
+    ],
+    subcategories: {
+      кино: ['кино'],
+      театр: ['театр'],
+      концерт: ['концерт'],
+      игры: ['игры'],
+      клуб: ['клуб'],
+      развлечения: ['развлечения']
+    }
+  },
 
-  вредные_привычки: [
-    'сигареты',
-    'табак',
-    'вейп',
-    'одноразка',
-    'курение'
-  ],
+  вредные_привычки: {
+    synonyms: [
+      'сигареты',
+      'табак',
+      'вейп',
+      'одноразка',
+      'курение'
+    ],
+    subcategories: {
+      сигареты: ['сигареты'],
+      вейп: ['вейп', 'одноразка'],
+      табак: ['табак'],
+      курение: ['курение']
+    }
+  },
 
-  подарки: [
-    'подарок',
-    'подарки',
-    'цветы'
-  ],
+  подарки: {
+    synonyms: [
+      'подарок',
+      'подарки',
+      'цветы',
+      'праздник',
+      'праздники'
+    ],
+    subcategories: {
+      цветы: ['цветы'],
+      подарки: ['подарок', 'подарки'],
+      праздники: ['праздник', 'праздники']
+    }
+  },
 
-  зарплата: [
-    'зарплата',
-    'зп',
-    'аванс',
-    'премия'
-  ],
+  зарплата: {
+    synonyms: [
+      'зарплата',
+      'зп',
+      'аванс',
+      'премия'
+    ],
+    subcategories: {
+      зарплата: ['зарплата', 'зп'],
+      аванс: ['аванс'],
+      премия: ['премия']
+    }
+  },
 
-  кешбэк: [
-    'кешбэк',
-    'кэшбэк',
-    'cashback'
-  ],
+  кешбэк: {
+    synonyms: [
+      'кешбэк',
+      'кэшбэк',
+      'cashback'
+    ],
+    subcategories: {
+      кешбэк: ['кешбэк', 'кэшбэк', 'cashback']
+    }
+  },
 
-  прочее: [
-    'прочее',
-    'разное',
-    'другое'
-  ]
+  прочее: {
+    synonyms: [
+      'прочее',
+      'разное',
+      'другое'
+    ],
+    subcategories: {
+      прочее: ['прочее', 'разное', 'другое']
+    }
+  }
 };
 
 const INCOME_CATEGORIES = [
   'зарплата',
   'кешбэк'
 ];
+
+const CATEGORY_SYNONYMS = Object.fromEntries(
+  Object.entries(CATEGORY_DATA).map(([category, data]) => {
+    return [category, data.synonyms];
+  })
+);
 
 function normalizeText(value) {
   return String(value || '')
@@ -197,45 +362,81 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function findMatchInList(value, list) {
+  const normalizedValue = normalizeText(value);
+  const normalizedList = list.map(normalizeText);
+
+  if (normalizedList.includes(normalizedValue)) {
+    return true;
+  }
+
+  for (const item of normalizedList) {
+    if (!item || item.length < 3) continue;
+
+    const regex = new RegExp(`(^|\\s)${escapeRegExp(item)}($|\\s)`, 'i');
+
+    if (regex.test(normalizedValue)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 function normalizeCategory(category) {
-  const value = normalizeText(category);
+  const info = getCategoryInfo(category);
+  return info.category;
+}
+
+function getCategoryInfo(input) {
+  const value = normalizeText(input);
 
   if (!value) {
-    return 'прочее';
+    return {
+      category: 'прочее',
+      subcategory: 'прочее',
+      isKnown: true
+    };
   }
 
-  // 1. Точное совпадение
-  for (const [categoryName, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
-    const normalizedSynonyms = synonyms.map(normalizeText);
+  for (const [categoryName, data] of Object.entries(CATEGORY_DATA)) {
+    if (findMatchInList(value, data.synonyms)) {
+      const subcategory = detectSubcategory(value, categoryName);
 
-    if (normalizedSynonyms.includes(value)) {
-      return categoryName;
+      return {
+        category: categoryName,
+        subcategory,
+        isKnown: true
+      };
     }
   }
 
-  // 2. Поиск синонима внутри фразы
-  // Например: "аренда квартиры" → жилье, "тренер зал" → спорт
-  for (const [categoryName, synonyms] of Object.entries(CATEGORY_SYNONYMS)) {
-    for (const synonym of synonyms) {
-      const normalizedSynonym = normalizeText(synonym);
+  return {
+    category: value,
+    subcategory: value,
+    isKnown: false
+  };
+}
 
-      if (!normalizedSynonym || normalizedSynonym.length < 3) {
-        continue;
-      }
+function detectSubcategory(input, category) {
+  const value = normalizeText(input);
+  const data = CATEGORY_DATA[category];
 
-      const regex = new RegExp(`(^|\\s)${escapeRegExp(normalizedSynonym)}($|\\s)`, 'i');
+  if (!data || !data.subcategories) {
+    return category;
+  }
 
-      if (regex.test(value)) {
-        return categoryName;
-      }
+  for (const [subcategoryName, synonyms] of Object.entries(data.subcategories)) {
+    if (findMatchInList(value, synonyms)) {
+      return subcategoryName;
     }
   }
 
-  return value;
+  return category;
 }
 
 function getCategoryList() {
-  return Object.keys(CATEGORY_SYNONYMS).sort();
+  return Object.keys(CATEGORY_DATA).sort();
 }
 
 function getExpenseCategoryList() {
@@ -248,9 +449,20 @@ function getIncomeCategoryList() {
   return [...INCOME_CATEGORIES];
 }
 
+function getSubcategoryList(category) {
+  const normalizedCategory = normalizeCategory(category);
+  const data = CATEGORY_DATA[normalizedCategory];
+
+  if (!data || !data.subcategories) {
+    return [];
+  }
+
+  return Object.keys(data.subcategories).sort();
+}
+
 function isKnownCategory(category) {
   const normalized = normalizeCategory(category);
-  return Object.prototype.hasOwnProperty.call(CATEGORY_SYNONYMS, normalized);
+  return Object.prototype.hasOwnProperty.call(CATEGORY_DATA, normalized);
 }
 
 function isIncomeCategory(category) {
@@ -264,12 +476,16 @@ function isExpenseCategory(category) {
 }
 
 module.exports = {
+  CATEGORY_DATA,
   CATEGORY_SYNONYMS,
   INCOME_CATEGORIES,
   normalizeCategory,
+  getCategoryInfo,
+  detectSubcategory,
   getCategoryList,
   getExpenseCategoryList,
   getIncomeCategoryList,
+  getSubcategoryList,
   isKnownCategory,
   isIncomeCategory,
   isExpenseCategory
