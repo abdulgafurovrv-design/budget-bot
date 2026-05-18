@@ -102,15 +102,17 @@ function isCancelText(text) {
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
     const { sendTodayReport, sendMonthReport } = require('./report');
- const {
-  handleSetBudget,
-  sendBudgets,
-  showBudgetCategories,
-  handleBudgetCategorySelected,
-  handleBudgetCancel,
-  handleBudgetAmountInput,
-  clearPendingBudgetInput
-} = require('./budgets');
+    const {
+      handleSetBudget,
+      sendBudgets,
+      showBudgetCategories,
+      handleBudgetPeriodSelected,
+      handleBudgetTypeSelected,
+      handleBudgetCategorySelected,
+      handleBudgetCancel,
+      handleBudgetAmountInput,
+      clearPendingBudgetInput
+    } = require('./budgets');
     const { startAutoReport } = require('./autoReport');
 
     console.log('DEBUG handlers:', {
@@ -125,6 +127,8 @@ function isCancelText(text) {
       sendMonthReport: typeof sendMonthReport,
       handleSetBudget: typeof handleSetBudget,
       sendBudgets: typeof sendBudgets,
+      handleBudgetPeriodSelected: typeof handleBudgetPeriodSelected,
+      handleBudgetTypeSelected: typeof handleBudgetTypeSelected,
       startAutoReport: typeof startAutoReport
     });
 
@@ -152,6 +156,7 @@ function isCancelText(text) {
     bot.hears(/^\/?(report_now|отчет сейчас|отчёт сейчас)$/i, sendTodayReport);
 
     bot.hears(/^\/?бюджет\s+/i, handleSetBudget);
+    bot.hears(/^\/?(бюджеты|лимиты)\s+(след|следующий|next)$/i, sendBudgets);
     bot.hears(/^\/?(бюджеты|лимиты)$/i, sendBudgets);
 
     // === Автоотчёт каждый день в 23:59 ===
@@ -166,12 +171,18 @@ function isCancelText(text) {
       return sendBudgets(ctx);
     });
 
+    bot.action('budget_view_current', sendBudgets);
+    bot.action('budget_view_next', sendBudgets);
+
     bot.action('budget_add', async (ctx) => {
       clearPendingBudgetInput(ctx.chat.id);
       return showBudgetCategories(ctx);
     });
-bot.action(/^budgetcat:/, handleBudgetCategorySelected);
-bot.action('budget_cancel', handleBudgetCancel);
+
+    bot.action(/^budget_period:/, handleBudgetPeriodSelected);
+    bot.action(/^budget_type:/, handleBudgetTypeSelected);
+    bot.action(/^budgetcat:/, handleBudgetCategorySelected);
+    bot.action('budget_cancel', handleBudgetCancel);
 
     bot.action('transfer', async (ctx) => {
       await ctx.answerCbQuery();
