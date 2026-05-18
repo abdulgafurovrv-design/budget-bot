@@ -8,6 +8,13 @@ const {
 } = require('./categories');
 const { walletCurrency } = require('./utils');
 
+const {
+  categoryIcon,
+  formatMoney,
+  budgetStatusEmoji,
+  progressBar
+} = require('./formatters');
+
 const pendingBudgetInputs = new Map();
 
 function getCurrentMonthKey(date = new Date()) {
@@ -53,9 +60,6 @@ function parseAmount(value) {
   return Number(String(value || '').replace(',', '.'));
 }
 
-function formatMoney(amount, currency = '₽') {
-  return `${Number(amount || 0).toFixed(2)} ${currency}`;
-}
 
 async function getBudgetRows() {
   const budgetsSheet = global.budgetsSheet;
@@ -138,16 +142,21 @@ async function buildBudgetStatus(category, wallet) {
 
   const spent = await getCategorySpent(normalizedCategory, currency);
   const left = budget.limit - spent;
+  const percent = budget.limit > 0 ? (spent / budget.limit) * 100 : 0;
+
+  const icon = categoryIcon(normalizedCategory);
+  const status = budgetStatusEmoji(percent);
 
   let msg =
-    `\n\n<b>Бюджет категории "${normalizedCategory}":</b>\n` +
+    `\n\n${status} <b>Бюджет: ${icon} ${normalizedCategory}</b>\n` +
+    `${progressBar(percent)}\n` +
     `Лимит: ${formatMoney(budget.limit, currency)}\n` +
     `Потрачено: ${formatMoney(spent, currency)}\n`;
 
   if (left >= 0) {
     msg += `Осталось: ${formatMoney(left, currency)}`;
   } else {
-    msg += `⚠️ Превышение: ${formatMoney(Math.abs(left), currency)}`;
+    msg += `Превышение: ${formatMoney(Math.abs(left), currency)}`;
   }
 
   return msg;
@@ -324,14 +333,19 @@ async function sendBudgets(ctx) {
 
       totalsByCurrency[item.currency] += item.limit;
 
-      msg += `• <b>${item.category}</b>: ` +
-        `${formatMoney(spent, item.currency)} / ${formatMoney(item.limit, item.currency)}`;
+ const percent = item.limit > 0 ? (spent / item.limit) * 100 : 0;
+const icon = categoryIcon(item.category);
+const status = budgetStatusEmoji(percent);
 
-      if (left >= 0) {
-        msg += `, осталось ${formatMoney(left, item.currency)}\n`;
-      } else {
-        msg += `, ⚠️ превышение ${formatMoney(Math.abs(left), item.currency)}\n`;
-      }
+msg += `${status} <b>${icon} ${item.category}</b>\n`;
+msg += `${progressBar(percent)}\n`;
+msg += `${formatMoney(spent, item.currency)} / ${formatMoney(item.limit, item.currency)}\n`;
+
+if (left >= 0) {
+  msg += `Осталось: ${formatMoney(left, item.currency)}\n\n`;
+} else {
+  msg += `Превышение: ${formatMoney(Math.abs(left), item.currency)}\n\n`;
+}
     }
 
     msg += `\n<b>ИТОГО бюджет на месяц:</b>\n`;
