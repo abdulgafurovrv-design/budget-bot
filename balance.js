@@ -2,6 +2,7 @@
 const { transactionsSheet, debtsSheet, doc } = global;
 const { mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet } = require('./utils');
+const { formatMoney } = require('./formatters');
 
 async function getBalance() {
   await doc.loadInfo();
@@ -73,20 +74,20 @@ async function getBalance() {
 async function sendBalance(ctx) {
   const balances = await getBalance();
 
-  let msg = '<b>Баланс по кошелькам:</b>\n\n';
+  let msg = '<b>💰 Баланс</b>\n\n';
 
-  msg += '<b>Рубли:</b>\n';
-  msg += `• Карта: ${balances.карта.toFixed(2)} ₽\n`;
-  msg += `• Наличка: ${balances.наличка.toFixed(2)} ₽\n`;
-  msg += `• Депозит: ${balances.депозит.toFixed(2)} ₽\n`;
-  msg += `• Долги: ${balances.долги.toFixed(2)} ₽\n`;
+  msg += '<b>🇷🇺 Рубли</b>\n';
+  msg += `💳 Карта: ${formatMoney(balances.карта, '₽')}\n`;
+  msg += `💵 Наличка: ${formatMoney(balances.наличка, '₽')}\n`;
+  msg += `🏦 Депозит: ${formatMoney(balances.депозит, '₽')}\n`;
+  msg += `🤝 Долги: ${formatMoney(balances.долги, '₽')}\n`;
 
-  msg += `\n<b>ИТОГ ₽:</b> ${balances.totalMain.toFixed(2)} ₽\n`;
+  msg += `\n<b>ИТОГО ₽:</b> ${formatMoney(balances.totalMain, '₽')}\n`;
 
-  msg += '\n<b>Валюта:</b>\n';
-  msg += `• Зарубежная карта: ${balances.зарубежная_карта.toFixed(2)} $\n`;
-  msg += `• Доллары: ${balances.доллары.toFixed(2)} $\n`;
-  msg += `• Евро: ${balances.евро.toFixed(2)} €`;
+  msg += '\n<b>🌍 Валюта</b>\n';
+  msg += `💳 Зарубежная карта: ${formatMoney(balances.зарубежная_карта, '$')}\n`;
+  msg += `💵 Доллары: ${formatMoney(balances.доллары, '$')}\n`;
+  msg += `💶 Евро: ${formatMoney(balances.евро, '€')}`;
 
   const keyboard = ctx.callbackQuery ? menuKeyboard() : mainKeyboard();
 
