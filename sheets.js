@@ -9,6 +9,33 @@ global.debtsSheet = null;
 global.budgetsSheet = null;
 global.doc = null;
 
+const TRANSACTION_HEADERS = [
+  'ID',
+  'Дата',
+  'Тип',
+  'Сумма',
+  'Категория',
+  'Подкатегория',
+  'Комментарий',
+  'Кошелёк'
+];
+
+const DEBT_HEADERS = [
+  'ID',
+  'Дата',
+  'Должник',
+  'Сумма',
+  'Тип',
+  'Коммент'
+];
+
+const BUDGET_HEADERS = [
+  'Месяц',
+  'Категория',
+  'Лимит',
+  'Валюта'
+];
+
 async function ensureSheet(doc, title, headers) {
   let sheet = doc.sheetsByTitle[title];
 
@@ -23,6 +50,13 @@ async function ensureSheet(doc, title, headers) {
 
   try {
     await sheet.loadHeaderRow();
+
+    const currentHeaders = sheet.headerValues || [];
+    const hasAllHeaders = headers.every(header => currentHeaders.includes(header));
+
+    if (!hasAllHeaders) {
+      await sheet.setHeaderRow(headers);
+    }
   } catch {
     await sheet.setHeaderRow(headers);
   }
@@ -42,31 +76,9 @@ module.exports = (async () => {
 
     await doc.loadInfo();
 
-    global.transactionsSheet = await ensureSheet(doc, 'Transactions', [
-      'ID',
-      'Дата',
-      'Тип',
-      'Сумма',
-      'Категория',
-      'Комментарий',
-      'Кошелёк'
-    ]);
-
-    global.debtsSheet = await ensureSheet(doc, 'Debts', [
-      'ID',
-      'Дата',
-      'Должник',
-      'Сумма',
-      'Тип',
-      'Коммент'
-    ]);
-
-    global.budgetsSheet = await ensureSheet(doc, 'Budgets', [
-      'Месяц',
-      'Категория',
-      'Лимит',
-      'Валюта'
-    ]);
+    global.transactionsSheet = await ensureSheet(doc, 'Transactions', TRANSACTION_HEADERS);
+    global.debtsSheet = await ensureSheet(doc, 'Debts', DEBT_HEADERS);
+    global.budgetsSheet = await ensureSheet(doc, 'Budgets', BUDGET_HEADERS);
 
     global.doc = doc;
 
