@@ -1,10 +1,15 @@
 // transaction.js
+const { Markup } = require('telegraf');
 const { cancelLastKeyboard, mainKeyboard, menuKeyboard } = require('./keyboards');
 const { normWallet, extractWallet, DEFAULT_WALLET } = require('./utils');
 const { getBalance } = require('./balance');
 const { handleDebtOperation, sendDebtors } = require('./debt');
-const { Markup } = require('telegraf');
-const { normalizeCategory, isKnownCategory, getCategoryList } = require('./categories');
+const {
+  normalizeCategory,
+  getCategoryInfo,
+  isKnownCategory,
+  getCategoryList
+} = require('./categories');
 const { buildBudgetStatus } = require('./budgets');
 const { categoryIcon, formatMoney } = require('./formatters');
 
@@ -12,6 +17,18 @@ const lastOperations = new Map();
 global.lastOperations = lastOperations;
 
 const pendingCategoryOperations = new Map();
+
+function getCurrencyByWallet(wallet) {
+  if (wallet === 'зарубежная_карта' || wallet === 'доллары') {
+    return '$';
+  }
+
+  if (wallet === 'евро') {
+    return '€';
+  }
+
+  return '₽';
+}
 
 function categorySelectKeyboard() {
   const categories = getCategoryList();
@@ -31,95 +48,14 @@ function categorySelectKeyboard() {
   return Markup.inlineKeyboard(rows);
 }
 
-async function finishTransaction(ctx, parsed, categoryOverride = null) {
-  const finalCategory = categoryOverride
-    ? normalizeCategory(categoryOverride)
-    : normalizeCategory(parsed.category);
-
-  const result = await addTransaction(
-    parsed.kind,
-    parsed.amount,
-    finalCategory,
-    '',
-    parsed.wallet
-  );
-
-  if (!result.success) {
-    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
-    return;
-  }
-
-  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
-  const balances = await getBalance();
-
-  const walletBalance = balances[parsed.wallet] || 0;
-
-  const totalMain =
-    (balances.карта || 0) +
-    (balances.наличка || 0) +
-    (balances.депозит || 0) +
-    (balances.долги || 0);
-
-  const currency =
-    parsed.wallet === 'зарубежная_карта' || parsed.wallet === 'доллары'
-      ? '$'
-      : parsed.wallet === 'евро'
-        ? '€'
-        : '₽';
-
-  let budgetText = '';
-
-  if (parsed.kind === 'расход') {
-    budgetText = await buildBudgetStatus(finalCategory, parsed.wallet);
-  }
-
-  const message =
-    `Операция прошла успешно ✅\n\n` +
-    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ${currency} — ${finalCategory}\n` +
-    `Кошелёк: #${parsed.wallet}\n\n` +
-    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ${currency}\n` +
-    `Общий итог ₽: ${totalMain.toFixed(2)} ₽` +
-    budgetText;
-
-  lastOperations.set(ctx.chat.id, {
-    type: 'trans',
-    id: result.id
-  });
-
-  await ctx.replyWithHTML(message, cancelLastKeyboard());
-}
-
-async function handleCategorySelected(ctx) {
-  try {
-    await ctx.answerCbQuery();
-
-    const chatId = ctx.chat.id;
-    const pending = pendingCategoryOperations.get(chatId);
-
-    if (!pending) {
-      return ctx.reply('Нет операции, ожидающей выбора категории', menuKeyboard());
-    }
-
-    const data = ctx.callbackQuery.data;
-
-    if (data === 'catselect_cancel') {
-      pendingCategoryOperations.delete(chatId);
-      return ctx.reply('Операция отменена', menuKeyboard());
-    }
-
-    const category = data.replace('catselect:', '');
-
-    pendingCategoryOperations.delete(chatId);
-
-    return finishTransaction(ctx, pending, category);
-
-  } catch (error) {
-    console.error('Ошибка выбора категории:', error);
-    return ctx.reply('Ошибка выбора категории ❌', menuKeyboard());
-  }
-}
-
-async function addTransaction(type, amount, category, comment = '', wallet = DEFAULT_WALLET) {
+async function addTransaction(
+  type,
+  amount,
+  category,
+  subcategory = '',
+  comment = '',
+  wallet = DEFAULT_WALLET
+) {
   try {
     const transactionsSheet = global.transactionsSheet;
     const doc = global.doc;
@@ -131,7 +67,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
 
     const date = new Date().toLocaleString('ru-RU');
     const sign = type === 'доход' ? amount : -amount;
-    wallet = normWallet(wallet);
+    const normalizedWallet = normWallet(wallet);
 
     await doc.loadInfo();
 
@@ -141,6 +77,7 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
 
     rows.forEach(row => {
       const id = Number(row.get('ID')) || 0;
+
       if (id > maxId) {
         maxId = id;
       }
@@ -154,8 +91,9 @@ async function addTransaction(type, amount, category, comment = '', wallet = DEF
       Тип: type,
       Сумма: sign,
       Категория: category,
-      Комментарий: comment,
-      Кошелёк: wallet
+      Подкатегория: subcategory || '',
+      Комментарий: comment || '',
+      Кошелёк: normalizedWallet
     });
 
     return { id, success: true };
@@ -295,7 +233,7 @@ function parseFreeInput(text) {
     return null;
   }
 
-  const hasIncomeKeyword = /зарплат|зп|аванс|премия|кешбэк|подарок|возврат|доход/i.test(lower);
+  const hasIncomeKeyword = /зарплат|зп|аванс|премия|кешбэк|кэшбэк|подарок|возврат|доход/i.test(lower);
   const hasPlus = text.includes('+');
 
   const kind = hasPlus || hasIncomeKeyword ? 'доход' : 'расход';
@@ -303,15 +241,114 @@ function parseFreeInput(text) {
   const categoryWords = [...words];
   categoryWords.splice(amountIndex, 1);
 
-  const category = categoryWords.join(' ').trim() || 'разное';
+  const rawCategory = categoryWords.join(' ').trim() || 'прочее';
+
+  const categoryInfo = getCategoryInfo(rawCategory);
 
   return {
     action: 'transaction',
     kind,
     amount,
-    category,
+    category: categoryInfo.category,
+    subcategory: categoryInfo.subcategory,
+    rawCategory,
+    categoryKnown: categoryInfo.isKnown,
     wallet
   };
+}
+
+async function finishTransaction(ctx, parsed, categoryOverride = null) {
+  let finalCategory = parsed.category;
+  let finalSubcategory = parsed.subcategory;
+
+  if (categoryOverride) {
+    finalCategory = normalizeCategory(categoryOverride);
+    finalSubcategory = parsed.rawCategory || finalCategory;
+  }
+
+  const result = await addTransaction(
+    parsed.kind,
+    parsed.amount,
+    finalCategory,
+    finalSubcategory,
+    '',
+    parsed.wallet
+  );
+
+  if (!result.success) {
+    await ctx.reply('Ошибка операции ❌\nНе удалось добавить запись', mainKeyboard());
+    return;
+  }
+
+  const kindText = parsed.kind === 'доход' ? 'доход' : 'расход';
+  const balances = await getBalance();
+
+  const walletBalance = balances[parsed.wallet] || 0;
+
+  const totalMain =
+    (balances.карта || 0) +
+    (balances.наличка || 0) +
+    (balances.депозит || 0) +
+    (balances.долги || 0);
+
+  const currency = getCurrencyByWallet(parsed.wallet);
+  const icon = categoryIcon(finalCategory);
+
+  let budgetText = '';
+
+  if (parsed.kind === 'расход') {
+    budgetText = await buildBudgetStatus(finalCategory, parsed.wallet);
+  }
+
+  const subcategoryText = finalSubcategory && finalSubcategory !== finalCategory
+    ? `\nПодкатегория: ${finalSubcategory}`
+    : '';
+
+  const message =
+    `Операция прошла успешно ✅\n\n` +
+    `Добавлен ${kindText}: ${formatMoney(parsed.amount, currency)} — ${icon} ${finalCategory}` +
+    subcategoryText + `\n` +
+    `Кошелёк: #${parsed.wallet}\n\n` +
+    `Текущий баланс кошелька: ${formatMoney(walletBalance, currency)}\n` +
+    `Общий итог ₽: ${formatMoney(totalMain, '₽')}` +
+    budgetText;
+
+  lastOperations.set(ctx.chat.id, {
+    type: 'trans',
+    id: result.id
+  });
+
+  await ctx.replyWithHTML(message, cancelLastKeyboard());
+}
+
+async function handleCategorySelected(ctx) {
+  try {
+    await ctx.answerCbQuery();
+
+    const chatId = ctx.chat.id;
+    const pending = pendingCategoryOperations.get(chatId);
+
+    if (!pending) {
+      return ctx.reply('Нет операции, ожидающей выбора категории', menuKeyboard());
+    }
+
+    const data = ctx.callbackQuery.data;
+
+    if (data === 'catselect_cancel') {
+      pendingCategoryOperations.delete(chatId);
+      return ctx.reply('Операция отменена', menuKeyboard());
+    }
+
+    const category = data.replace('catselect:', '');
+
+    pendingCategoryOperations.delete(chatId);
+
+    return finishTransaction(ctx, pending, category);
+
+  } catch (error) {
+    console.error('Ошибка выбора категории:', error);
+    return ctx.reply('Ошибка выбора категории ❌', menuKeyboard());
+  }
 }
 
 async function handleFreeInput(ctx) {
@@ -343,49 +380,22 @@ async function handleFreeInput(ctx) {
     return handleDebtOperation(ctx, parsed);
   }
 
-const normalizedCategory = normalizeCategory(parsed.category);
+  if (!parsed.categoryKnown) {
+    pendingCategoryOperations.set(ctx.chat.id, {
+      ...parsed,
+      originalCategory: parsed.rawCategory
+    });
 
-if (!isKnownCategory(parsed.category)) {
-  pendingCategoryOperations.set(ctx.chat.id, {
-    ...parsed,
-    originalCategory: parsed.category
-  });
+    return ctx.reply(
+      `Не нашёл категорию: "${parsed.rawCategory}"\n\n` +
+      `Сумма: ${formatMoney(parsed.amount, getCurrencyByWallet(parsed.wallet))}\n` +
+      `Кошелёк: #${parsed.wallet}\n\n` +
+      `Выбери категорию из списка или отнеси в "прочее":`,
+      categorySelectKeyboard()
+    );
+  }
 
-  return ctx.reply(
-    `Не нашёл категорию: "${parsed.category}"\n\n` +
-    `Выбери категорию из списка или отнеси в "прочее":`,
-    categorySelectKeyboard()
-  );
-}
-
-parsed.category = normalizedCategory;
-
-return finishTransaction(ctx, parsed);
-
-  const walletBalance = balances[parsed.wallet] || 0;
-
-  const totalMain =
-    (balances.карта || 0) +
-    (balances.наличка || 0) +
-    (balances.депозит || 0) +
-    (balances.долги || 0);
-
-const icon = categoryIcon(finalCategory);
-
-const message =
-  `Операция прошла успешно ✅\n\n` +
-  `Добавлен ${kindText}: ${formatMoney(parsed.amount, currency)} — ${icon} ${finalCategory}\n` +
-  `Кошелёк: #${parsed.wallet}\n\n` +
-  `Текущий баланс кошелька: ${formatMoney(walletBalance, currency)}\n` +
-  `Общий итог ₽: ${formatMoney(totalMain, '₽')}` +
-  budgetText;
-
-  lastOperations.set(ctx.chat.id, {
-    type: 'trans',
-    id: result.id
-  });
-
-  await ctx.reply(message, cancelLastKeyboard());
+  return finishTransaction(ctx, parsed);
 }
 
 module.exports = {
