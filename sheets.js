@@ -31,6 +31,7 @@ const DEBT_HEADERS = [
 
 const BUDGET_HEADERS = [
   'Месяц',
+  'Тип',
   'Категория',
   'Лимит',
   'Валюта'
