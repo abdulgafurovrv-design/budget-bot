@@ -6,6 +6,7 @@ const { handleDebtOperation, sendDebtors } = require('./debt');
 const { Markup } = require('telegraf');
 const { normalizeCategory, isKnownCategory, getCategoryList } = require('./categories');
 const { buildBudgetStatus } = require('./budgets');
+const { categoryIcon, formatMoney } = require('./formatters');
 
 const lastOperations = new Map();
 global.lastOperations = lastOperations;
@@ -369,12 +370,15 @@ return finishTransaction(ctx, parsed);
     (balances.депозит || 0) +
     (balances.долги || 0);
 
-  const message =
-    `Операция прошла успешно ✅\n\n` +
-    `Добавлен ${kindText}: ${parsed.amount.toFixed(2)} ₽ — ${parsed.category}\n` +
-    `Кошелёк: #${parsed.wallet}\n\n` +
-    `Текущий баланс кошелька: ${walletBalance.toFixed(2)} ${parsed.wallet === 'зарубежная_карта' || parsed.wallet === 'доллары' ? '$' : parsed.wallet === 'евро' ? '€' : '₽'}\n` +
-    `Общий итог (основные): ${totalMain.toFixed(2)} ₽`;
+const icon = categoryIcon(finalCategory);
+
+const message =
+  `Операция прошла успешно ✅\n\n` +
+  `Добавлен ${kindText}: ${formatMoney(parsed.amount, currency)} — ${icon} ${finalCategory}\n` +
+  `Кошелёк: #${parsed.wallet}\n\n` +
+  `Текущий баланс кошелька: ${formatMoney(walletBalance, currency)}\n` +
+  `Общий итог ₽: ${formatMoney(totalMain, '₽')}` +
+  budgetText;
 
   lastOperations.set(ctx.chat.id, {
     type: 'trans',
