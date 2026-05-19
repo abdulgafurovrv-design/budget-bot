@@ -1,20 +1,21 @@
 // report.js
 const { transactionsSheet, doc } = global;
+const { Markup } = require('telegraf');
 const { menuKeyboard } = require('./keyboards');
 const { normWallet, walletCurrency, parseSheetNumber } = require('./utils');
+const { normalizeCategory } = require('./categories');
+const { categoryIcon, formatMoney } = require('./formatters');
 
 const EXCLUDED_CATEGORIES = [
   'перевод',
   'корректировка остатка',
   'долг',
-  'возврат долга'
+  'возврат долга',
+  'обмен валюты'
 ];
 
 function parseRuDate(value) {
   const str = String(value || '').trim();
-
-  // Обычно дата приходит как: 15.05.2026, 11:08:20
-  // или: 15.05.2026 11:08:20
   const match = str.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})/);
 
   if (!match) {
@@ -22,36 +23,95 @@ function parseRuDate(value) {
     return Number.isNaN(fallback.getTime()) ? null : fallback;
   }
 
-  const day = Number(match[1]);
-  const month = Number(match[2]) - 1;
-  const year = Number(match[3]);
-
-  return new Date(year, month, day);
-}
-
-function isSameDay(dateA, dateB) {
-  return (
-    dateA &&
-    dateB &&
-    dateA.getFullYear() === dateB.getFullYear() &&
-    dateA.getMonth() === dateB.getMonth() &&
-    dateA.getDate() === dateB.getDate()
+  return new Date(
+    Number(match[3]),
+    Number(match[2]) - 1,
+    Number(match[1])
   );
 }
 
-function isSameMonth(dateA, dateB) {
-  return (
-    dateA &&
-    dateB &&
-    dateA.getFullYear() === dateB.getFullYear() &&
-    dateA.getMonth() === dateB.getMonth()
-  );
+function startOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function normalizeCategory(category) {
-  return String(category || 'разное')
-    .trim()
-    .toLowerCase();
+function endOfDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
+}
+
+function startOfWeek(date) {
+  const d = startOfDay(date);
+  const day = d.getDay(); // 0 воскресенье, 1 понедельник
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function endOfWeek(date) {
+  const d = startOfWeek(date);
+  d.setDate(d.getDate() + 6);
+  return endOfDay(d);
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function formatDate(date) {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = date.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+function getPeriodRange(period = 'day') {
+  const now = new Date();
+
+  if (period === 'week') {
+    const from = startOfWeek(now);
+    const to = endOfWeek(now);
+
+    return {
+      from,
+      to,
+      title: `📊 Отчёт за неделю`,
+      subtitle: `${formatDate(from)} — ${formatDate(to)}`
+    };
+  }
+
+  if (period === 'month') {
+    const from = startOfMonth(now);
+    const to = endOfMonth(now);
+
+    return {
+      from,
+      to,
+      title: `📊 Отчёт за месяц`,
+      subtitle: `${String(now.getMonth() + 1).padStart(2, '0')}.${now.getFullYear()}`
+    };
+  }
+
+  const from = startOfDay(now);
+  const to = endOfDay(now);
+
+  return {
+    from,
+    to,
+    title: `📊 Отчёт за сегодня`,
+    subtitle: formatDate(now)
+  };
+}
+
+function isDateInRange(date, from, to) {
+  return date && date >= from && date <= to;
+}
+
+function normalizeSubcategory(value, category) {
+  const sub = String(value || '').trim().toLowerCase();
+  return sub || category || 'прочее';
 }
 
 function shouldExclude(category, type) {
@@ -59,79 +119,103 @@ function shouldExclude(category, type) {
   const t = String(type || '').trim().toLowerCase();
 
   if (t === 'перевод') return true;
+  if (t === 'обмен') return true;
   if (EXCLUDED_CATEGORIES.includes(c)) return true;
 
   return false;
 }
 
-function addToGroup(target, key, amount) {
-  if (!target[key]) {
-    target[key] = 0;
+function ensureCurrencyBucket(target, currency) {
+  if (!target[currency]) {
+    target[currency] = {
+      expenseTotal: 0,
+      incomeTotal: 0,
+      expenses: {},
+      income: {}
+    };
   }
 
-  target[key] += amount;
+  return target[currency];
 }
 
-function formatMoney(amount, currency = '₽') {
-  return `${amount.toFixed(2)} ${currency}`;
+function addGrouped(group, category, subcategory, amount) {
+  if (!group[category]) {
+    group[category] = {
+      total: 0,
+      subcategories: {}
+    };
+  }
+
+  group[category].total += amount;
+
+  if (!group[category].subcategories[subcategory]) {
+    group[category].subcategories[subcategory] = 0;
+  }
+
+  group[category].subcategories[subcategory] += amount;
 }
 
-function formatGroup(title, group, currency = '₽') {
+function formatSignedMoney(amount, currency) {
+  if (amount > 0) return `+${formatMoney(amount, currency)}`;
+  return formatMoney(amount, currency);
+}
+
+function formatCategoryBlock(group, currency) {
   const entries = Object.entries(group)
-    .filter(([, amount]) => Math.abs(amount) > 0.009)
-    .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+    .filter(([, data]) => Math.abs(data.total) > 0.009)
+    .sort((a, b) => Math.abs(b[1].total) - Math.abs(a[1].total));
 
   if (entries.length === 0) {
-    return `<b>${title}:</b>\nнет\n`;
+    return 'нет\n';
   }
 
-  let msg = `<b>${title}:</b>\n`;
+  let msg = '';
 
-  entries.forEach(([name, amount]) => {
-    msg += `• ${name}: ${formatMoney(Math.abs(amount), currency)}\n`;
+  entries.forEach(([category, data]) => {
+    const icon = categoryIcon(category);
+    msg += `${icon} <b>${category}</b>: ${formatMoney(Math.abs(data.total), currency)}\n`;
+
+    const subs = Object.entries(data.subcategories)
+      .filter(([, amount]) => Math.abs(amount) > 0.009)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]));
+
+    subs.forEach(([subcategory, amount]) => {
+      if (subcategory === category) return;
+      msg += `  • ${subcategory}: ${formatMoney(Math.abs(amount), currency)}\n`;
+    });
   });
 
   return msg;
+}
+
+function reportPeriodKeyboard() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.callback('Сегодня', 'report_day'),
+      Markup.button.callback('Неделя', 'report_week'),
+      Markup.button.callback('Месяц', 'report_month')
+    ],
+    [Markup.button.callback('Меню', 'menu')]
+  ]);
 }
 
 async function buildReport(period = 'day') {
   await doc.loadInfo();
 
   const rows = await transactionsSheet.getRows();
-  const now = new Date();
+  const { from, to, title, subtitle } = getPeriodRange(period);
 
-  const expensesRub = {};
-  const incomeRub = {};
-
-  const expensesUsd = {};
-  const incomeUsd = {};
-
-  const expensesEur = {};
-  const incomeEur = {};
-
-  let totalExpenseRub = 0;
-  let totalIncomeRub = 0;
-
-  let totalExpenseUsd = 0;
-  let totalIncomeUsd = 0;
-
-  let totalExpenseEur = 0;
-  let totalIncomeEur = 0;
+  const buckets = {};
 
   rows.forEach(row => {
     const rawDate = row.get('Дата');
     const date = parseRuDate(rawDate);
 
-    if (!date) return;
-
-    const inPeriod = period === 'month'
-      ? isSameMonth(date, now)
-      : isSameDay(date, now);
-
-    if (!inPeriod) return;
+    if (!isDateInRange(date, from, to)) return;
 
     const type = String(row.get('Тип') || '').trim().toLowerCase();
     const category = normalizeCategory(row.get('Категория'));
+    const subcategory = normalizeSubcategory(row.get('Подкатегория'), category);
     const rawWallet = row.get('Кошелёк');
     const wallet = normWallet(rawWallet, rawWallet ? null : 'карта');
 
@@ -143,111 +227,101 @@ async function buildReport(period = 'day') {
     if (amount === 0) return;
 
     const currency = walletCurrency(wallet);
+    const bucket = ensureCurrencyBucket(buckets, currency);
 
     if (amount < 0) {
-      if (currency === '$') {
-        addToGroup(expensesUsd, category, amount);
-        totalExpenseUsd += Math.abs(amount);
-      } else if (currency === '€') {
-        addToGroup(expensesEur, category, amount);
-        totalExpenseEur += Math.abs(amount);
-      } else {
-        addToGroup(expensesRub, category, amount);
-        totalExpenseRub += Math.abs(amount);
-      }
+      const absAmount = Math.abs(amount);
+      bucket.expenseTotal += absAmount;
+      addGrouped(bucket.expenses, category, subcategory, absAmount);
     }
 
     if (amount > 0) {
-      if (currency === '$') {
-        addToGroup(incomeUsd, category, amount);
-        totalIncomeUsd += amount;
-      } else if (currency === '€') {
-        addToGroup(incomeEur, category, amount);
-        totalIncomeEur += amount;
-      } else {
-        addToGroup(incomeRub, category, amount);
-        totalIncomeRub += amount;
-      }
+      bucket.incomeTotal += amount;
+      addGrouped(bucket.income, category, subcategory, amount);
     }
   });
 
-  const title = period === 'month'
-    ? 'Отчёт за текущий месяц'
-    : 'Отчёт за сегодня';
+  let msg = `<b>${title}</b>\n${subtitle}\n\n`;
 
-  let msg = `<b>${title}</b>\n\n`;
+  const currencyOrder = ['₽', '$', '€'];
+  const currencies = Object.keys(buckets).sort((a, b) => {
+    const ai = currencyOrder.indexOf(a);
+    const bi = currencyOrder.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
 
-  msg += `<b>Расходы ₽:</b> ${formatMoney(totalExpenseRub, '₽')}\n`;
-  msg += formatGroup('По категориям ₽', expensesRub, '₽');
-
-  if (totalIncomeRub > 0) {
-    msg += `\n<b>Доходы ₽:</b> ${formatMoney(totalIncomeRub, '₽')}\n`;
-    msg += formatGroup('Доходы по категориям ₽', incomeRub, '₽');
+  if (currencies.length === 0) {
+    msg += 'Операций за период нет.';
+    return msg;
   }
 
-  if (totalExpenseUsd > 0 || totalIncomeUsd > 0) {
-    msg += `\n<b>Валюта $:</b>\n`;
+  currencies.forEach(currency => {
+    const bucket = buckets[currency];
+    const diff = bucket.incomeTotal - bucket.expenseTotal;
 
-    if (totalExpenseUsd > 0) {
-      msg += `Расходы: ${formatMoney(totalExpenseUsd, '$')}\n`;
-      msg += formatGroup('По категориям $', expensesUsd, '$');
+    msg += `<b>${currency === '₽' ? '🇷🇺 Рубли' : `Валюта ${currency}`}</b>\n`;
+    msg += `Расходы: ${formatMoney(bucket.expenseTotal, currency)}\n`;
+    msg += `Доходы: ${formatMoney(bucket.incomeTotal, currency)}\n`;
+    msg += `Разница: ${formatSignedMoney(diff, currency)}\n\n`;
+
+    msg += `<b>Расходы по категориям:</b>\n`;
+    msg += formatCategoryBlock(bucket.expenses, currency);
+
+    if (bucket.incomeTotal > 0) {
+      msg += `\n<b>Доходы по категориям:</b>\n`;
+      msg += formatCategoryBlock(bucket.income, currency);
     }
 
-    if (totalIncomeUsd > 0) {
-      msg += `\nДоходы: ${formatMoney(totalIncomeUsd, '$')}\n`;
-      msg += formatGroup('Доходы по категориям $', incomeUsd, '$');
+    msg += '\n';
+  });
+
+  return msg.trim();
+}
+
+async function sendReportMenu(ctx) {
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery();
     }
+
+    return ctx.reply('Какой отчёт показать?', reportPeriodKeyboard());
+  } catch (error) {
+    console.error('Ошибка меню отчётов:', error);
+    return ctx.reply('Ошибка открытия меню отчётов ❌', menuKeyboard());
   }
+}
 
-  if (totalExpenseEur > 0 || totalIncomeEur > 0) {
-    msg += `\n<b>Валюта €:</b>\n`;
-
-    if (totalExpenseEur > 0) {
-      msg += `Расходы: ${formatMoney(totalExpenseEur, '€')}\n`;
-      msg += formatGroup('По категориям €', expensesEur, '€');
+async function sendPeriodReport(ctx, period) {
+  try {
+    if (ctx.callbackQuery) {
+      await ctx.answerCbQuery();
     }
 
-    if (totalIncomeEur > 0) {
-      msg += `\nДоходы: ${formatMoney(totalIncomeEur, '€')}\n`;
-      msg += formatGroup('Доходы по категориям €', incomeEur, '€');
-    }
+    const msg = await buildReport(period);
+    return ctx.replyWithHTML(msg, menuKeyboard());
+
+  } catch (error) {
+    console.error(`Ошибка отчёта ${period}:`, error);
+    return ctx.reply('Ошибка формирования отчёта ❌', menuKeyboard());
   }
-
-  return msg;
 }
 
 async function sendTodayReport(ctx) {
-  try {
-    if (ctx.callbackQuery) {
-      await ctx.answerCbQuery();
-    }
+  return sendPeriodReport(ctx, 'day');
+}
 
-    const msg = await buildReport('day');
-    return ctx.replyWithHTML(msg, menuKeyboard());
-
-  } catch (error) {
-    console.error('Ошибка отчёта за день:', error);
-    return ctx.reply('Ошибка формирования отчёта за день ❌', menuKeyboard());
-  }
+async function sendWeekReport(ctx) {
+  return sendPeriodReport(ctx, 'week');
 }
 
 async function sendMonthReport(ctx) {
-  try {
-    if (ctx.callbackQuery) {
-      await ctx.answerCbQuery();
-    }
-
-    const msg = await buildReport('month');
-    return ctx.replyWithHTML(msg, menuKeyboard());
-
-  } catch (error) {
-    console.error('Ошибка отчёта за месяц:', error);
-    return ctx.reply('Ошибка формирования отчёта за месяц ❌', menuKeyboard());
-  }
+  return sendPeriodReport(ctx, 'month');
 }
 
 module.exports = {
+  sendReportMenu,
   sendTodayReport,
+  sendWeekReport,
   sendMonthReport,
   buildReport
 };
