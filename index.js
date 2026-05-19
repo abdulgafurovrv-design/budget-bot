@@ -37,7 +37,7 @@ function helpText() {
 • Перевод
 • Обмен валюты
 • Долги
-• Отчёты
+• Отчёты день / неделя / месяц
 • Свободный ввод расходов и доходов
 
 Примеры:
@@ -62,11 +62,15 @@ function helpText() {
 
 Бюджеты:
 • /бюджет кафе 15000
-• /бюджет продукты 60000
+• /бюджет доход зарплата 550000
+• /бюджет след продукты 60000
 • /бюджеты
+• /бюджеты след
 
 Отчёты:
 • отчёт
+• день
+• неделя
 • месяц
 • /report_now
 
@@ -98,10 +102,17 @@ function isCancelText(text) {
     const { handleInitial } = require('./initial');
     const { handleTransfer } = require('./transfer');
     const { handleExchange } = require('./exchange');
- const { handleFreeInput, handleCategorySelected } = require('./transaction');
+    const { handleFreeInput, handleCategorySelected } = require('./transaction');
     const { handleCancelLast } = require('./cancel');
     const { sendDebtors } = require('./debt');
-    const { sendTodayReport, sendMonthReport } = require('./report');
+
+    const {
+      sendReportMenu,
+      sendTodayReport,
+      sendWeekReport,
+      sendMonthReport
+    } = require('./report');
+
     const {
       handleSetBudget,
       sendBudgets,
@@ -113,6 +124,7 @@ function isCancelText(text) {
       handleBudgetAmountInput,
       clearPendingBudgetInput
     } = require('./budgets');
+
     const { startAutoReport } = require('./autoReport');
 
     console.log('DEBUG handlers:', {
@@ -123,7 +135,9 @@ function isCancelText(text) {
       handleFreeInput: typeof handleFreeInput,
       handleCancelLast: typeof handleCancelLast,
       sendDebtors: typeof sendDebtors,
+      sendReportMenu: typeof sendReportMenu,
       sendTodayReport: typeof sendTodayReport,
+      sendWeekReport: typeof sendWeekReport,
       sendMonthReport: typeof sendMonthReport,
       handleSetBudget: typeof handleSetBudget,
       sendBudgets: typeof sendBudgets,
@@ -145,27 +159,37 @@ function isCancelText(text) {
       return ctx.replyWithHTML(helpText(), mainKeyboard());
     });
 
-    // Кириллические команды ловим как текст, чтобы они не уходили в свободный ввод
+    // === Основные команды ===
     bot.hears(/^\/?баланс$/i, sendBalance);
     bot.hears(/^\/?остаток\s+/i, handleInitial);
     bot.hears(/^\/?перевод\s+/i, handleTransfer);
     bot.hears(/^\/?обмен\s+/i, handleExchange);
 
-    bot.hears(/^\/?(отчет|отчёт|сегодня)$/i, sendTodayReport);
+    // === Отчёты ===
+    bot.hears(/^\/?(отчет|отчёт)$/i, sendReportMenu);
+    bot.hears(/^\/?(день|сегодня|отчет день|отчёт день|отчет сегодня|отчёт сегодня)$/i, sendTodayReport);
+    bot.hears(/^\/?(неделя|отчет неделя|отчёт неделя)$/i, sendWeekReport);
     bot.hears(/^\/?(месяц|отчет месяц|отчёт месяц)$/i, sendMonthReport);
     bot.hears(/^\/?(report_now|отчет сейчас|отчёт сейчас)$/i, sendTodayReport);
 
+    // === Бюджеты ===
     bot.hears(/^\/?бюджет\s+/i, handleSetBudget);
     bot.hears(/^\/?(бюджеты|лимиты)\s+(след|следующий|next)$/i, sendBudgets);
     bot.hears(/^\/?(бюджеты|лимиты)$/i, sendBudgets);
 
-    // === Автоотчёт каждый день в 23:59 ===
+    // === Автоотчёт и напоминания ===
     startAutoReport(bot);
 
     // === Кнопки главного меню ===
     bot.action('balance', sendBalance);
     bot.action('debtors', sendDebtors);
-    bot.action('report', sendTodayReport);
+
+    // Кнопка "Отчёт" теперь открывает меню выбора периода
+    bot.action('report', sendReportMenu);
+    bot.action('report_day', sendTodayReport);
+    bot.action('report_week', sendWeekReport);
+    bot.action('report_month', sendMonthReport);
+
     bot.action('budgets', async (ctx) => {
       clearPendingBudgetInput(ctx.chat.id);
       return sendBudgets(ctx);
@@ -213,8 +237,6 @@ function isCancelText(text) {
     });
 
     // === Кнопка Расход + ===
-    // Поддерживаем новый callback add_expense и старый expense,
-    // чтобы старые сообщения с кнопками тоже не ломались.
     bot.action(['add_expense', 'expense'], async (ctx) => {
       await ctx.answerCbQuery();
 
@@ -234,7 +256,6 @@ function isCancelText(text) {
     });
 
     // === Кнопка Доход + ===
-    // Поддерживаем новый callback add_income и старый income.
     bot.action(['add_income', 'income'], async (ctx) => {
       await ctx.answerCbQuery();
 
@@ -271,8 +292,8 @@ function isCancelText(text) {
     });
 
     bot.action(/^catselect:/, handleCategorySelected);
-bot.action('catselect_cancel', handleCategorySelected);
-    
+    bot.action('catselect_cancel', handleCategorySelected);
+
     // === Отмена последней операции ===
     bot.action('cancel_last', handleCancelLast);
 
@@ -284,9 +305,9 @@ bot.action('catselect_cancel', handleCategorySelected);
 
       const budgetHandled = await handleBudgetAmountInput(ctx);
 
-if (budgetHandled) {
-  return;
-}
+      if (budgetHandled) {
+        return;
+      }
 
       if (mode) {
         if (isCancelText(text)) {
@@ -297,7 +318,6 @@ if (budgetHandled) {
         pendingModes.delete(chatId);
 
         // Если нажали "Доход +", принудительно делаем доход.
-        // Пользователь может писать без плюса: "зарплата 100000 карта"
         if (mode === 'income') {
           if (!text.startsWith('+')) {
             ctx.message.text = `+${text}`;
