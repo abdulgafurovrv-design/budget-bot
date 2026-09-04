@@ -4,7 +4,8 @@ const { buildReport } = require('./report');
 const {
   getCurrentMonthKey,
   getNextMonthKey,
-  hasBudgetsForMonth,
+  getMissingBudgetCategories,
+  hasMissingBudgetCategories,
   buildBudgetReminderMessage
 } = require('./budgets');
 
@@ -28,10 +29,14 @@ async function sendBudgetReminderIfNeeded(bot) {
     // 1-го числа напоминаем, если бюджет на текущий месяц не заполнен
     if (now.getDate() === 1) {
       const currentMonthKey = getCurrentMonthKey(now);
-      const hasCurrentBudget = await hasBudgetsForMonth(currentMonthKey);
+      const missing = await getMissingBudgetCategories(currentMonthKey);
 
-      if (!hasCurrentBudget) {
-        const message = await buildBudgetReminderMessage(currentMonthKey, 'current_missing');
+      if (hasMissingBudgetCategories(missing)) {
+        const message = await buildBudgetReminderMessage(
+          currentMonthKey,
+          'current_missing',
+          missing
+        );
 
         await bot.telegram.sendMessage(CHAT_ID, message, {
           parse_mode: 'HTML'
@@ -44,10 +49,14 @@ async function sendBudgetReminderIfNeeded(bot) {
     // За 2 дня до конца месяца напоминаем, если бюджет на следующий месяц не заполнен
     if (isTwoDaysBeforeMonthEnd(now)) {
       const nextMonthKey = getNextMonthKey(now);
-      const hasNextBudget = await hasBudgetsForMonth(nextMonthKey);
+      const missing = await getMissingBudgetCategories(nextMonthKey);
 
-      if (!hasNextBudget) {
-        const message = await buildBudgetReminderMessage(nextMonthKey, 'next_missing');
+      if (hasMissingBudgetCategories(missing)) {
+        const message = await buildBudgetReminderMessage(
+          nextMonthKey,
+          'next_missing',
+          missing
+        );
 
         await bot.telegram.sendMessage(CHAT_ID, message, {
           parse_mode: 'HTML'

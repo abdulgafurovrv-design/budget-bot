@@ -888,11 +888,60 @@ async function hasBudgetsForMonth(monthKey) {
   });
 }
 
-async function buildBudgetReminderMessage(monthKey, reminderType = 'current_missing') {
+async function getMissingBudgetCategories(monthKey) {
+  const rows = await getBudgetRows();
+  const filled = new Set();
+
+  rows.forEach(row => {
+    if (String(row.get('Месяц') || '').trim() !== monthKey) return;
+    if ((Number(row.get('Лимит')) || 0) <= 0) return;
+
+    const type = normalizeBudgetType(row.get('Тип') || 'расход');
+    const category = normalizeCategory(row.get('Категория'));
+
+    if (isValidCategoryForBudgetType(category, type)) {
+      filled.add(`${type}:${category}`);
+    }
+  });
+
+  return {
+    expense: getExpenseCategoryList().filter(category => {
+      return !filled.has(`расход:${category}`);
+    }),
+    income: getIncomeCategoryList().filter(category => {
+      return !filled.has(`доход:${category}`);
+    })
+  };
+}
+
+function hasMissingBudgetCategories(missing) {
+  return missing.expense.length > 0 || missing.income.length > 0;
+}
+
+async function buildBudgetReminderMessage(
+  monthKey,
+  reminderType = 'current_missing',
+  missing = null
+) {
+  const missingCategories = missing || await getMissingBudgetCategories(monthKey);
+  const lines = [];
+
+  if (missingCategories.expense.length > 0) {
+    lines.push(`<b>Расходы:</b> ${missingCategories.expense.join(', ')}`);
+  }
+
+  if (missingCategories.income.length > 0) {
+    lines.push(`<b>Доходы:</b> ${missingCategories.income.join(', ')}`);
+  }
+
+  const missingText = lines.length > 0
+    ? `\n\nНе заполнены:\n${lines.join('\n')}`
+    : '';
+
   if (reminderType === 'next_missing') {
     return (
       `📌 Через 2 дня новый месяц\n\n` +
-      `Бюджет на ${monthKey} ещё не заполнен.\n\n` +
+      `Бюджет на ${monthKey} заполнен не полностью.${missingText}\n\n` +
       `Рекомендуется заранее внести:\n` +
       `• лимиты расходов\n` +
       `• план доходов\n\n` +
@@ -903,8 +952,8 @@ async function buildBudgetReminderMessage(monthKey, reminderType = 'current_miss
   }
 
   return (
-    `⚠️ Бюджет на текущий месяц не заполнен\n\n` +
-    `Месяц: ${monthKey}\n\n` +
+    `⚠️ Бюджет на текущий месяц заполнен не полностью\n\n` +
+    `Месяц: ${monthKey}${missingText}\n\n` +
     `Заполни бюджеты по расходам и доходам.\n\n` +
     `Примеры:\n` +
     `/бюджет продукты 60000\n` +
@@ -927,6 +976,8 @@ module.exports = {
   handleBudgetCancel,
   handleBudgetAmountInput,
   hasBudgetsForMonth,
+  getMissingBudgetCategories,
+  hasMissingBudgetCategories,
   buildBudgetReminderMessage,
   clearPendingBudgetInput
 };
