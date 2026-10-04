@@ -83,7 +83,10 @@ function isSameMonth(dateA, dateB) {
 }
 
 function parseAmount(value) {
-  return Number(String(value || '').replace(',', '.'));
+  const text = String(value ?? '').trim();
+  if (!/^(?:\d+|\d{1,3}(?:[ \u00a0\u202f]\d{3})+)(?:[.,]\d{1,2})?$/.test(text)) return NaN;
+  const amount = Number(text.replace(/[ \u00a0\u202f]/g, '').replace(',', '.'));
+  return Number.isFinite(amount) ? amount : NaN;
 }
 
 function normalizeBudgetType(value) {
@@ -189,15 +192,16 @@ async function getCategorySpent(
   category,
   currency = '₽',
   monthDate = new Date(),
-  budgetType = 'расход'
+  budgetType = 'расход',
+  transactionRows = null
 ) {
   const transactionsSheet = global.transactionsSheet;
 
-  if (!transactionsSheet) {
+  if (!transactionsSheet && !transactionRows) {
     return 0;
   }
 
-  const rows = await transactionsSheet.getRows();
+  const rows = transactionRows || await transactionsSheet.getRows();
   const normalizedCategory = normalizeCategory(category);
   const normalizedType = normalizeBudgetType(budgetType);
 
@@ -235,6 +239,27 @@ async function getCategorySpent(
   });
 
   return total;
+}
+
+async function getCategoryMonthlyAverage(category, currency = '₽', budgetType = 'расход', now = new Date()) {
+  const rows = global.transactionsSheet ? await global.transactionsSheet.getRows() : [];
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  let firstMonth = currentMonth;
+  for (const row of rows) {
+    const date = parseRuDate(row.get('Дата'));
+    if (!date || !Number.isFinite(date.getTime())) continue;
+    firstMonth = Math.min(firstMonth, date.getFullYear() * 12 + date.getMonth());
+  }
+  const months = currentMonth - firstMonth;
+  if (!months) return { average: null, months: 0 };
+
+  let total = 0;
+  // Reuse the same snapshot and transaction exclusions as the monthly totals.
+  for (let month = firstMonth; month < currentMonth; month += 1) {
+    total += await getCategorySpent(category, currency,
+      new Date(Math.floor(month / 12), month % 12, 1), budgetType, rows);
+  }
+  return { average: total / months, months };
 }
 
 async function buildBudgetStatus(category, wallet) {
@@ -284,13 +309,13 @@ async function buildBudgetStatus(category, wallet) {
   return msg;
 }
 
-function budgetMenuKeyboard() {
+function budgetMenuKeyboard(monthKey = getCurrentMonthKey()) {
   return Markup.inlineKeyboard([
     [
       Markup.button.callback('Текущий месяц', 'budget_view_current'),
       Markup.button.callback('Следующий месяц', 'budget_view_next')
     ],
-    [Markup.button.callback('Добавить / изменить бюджет', 'budget_add')],
+    [Markup.button.callback('Добавить / изменить бюджет', `budget_add:${monthKey}`)],
     [Markup.button.callback('Меню', 'menu')]
   ]);
 }
@@ -315,12 +340,18 @@ function budgetTypeKeyboard(monthKey) {
   ]);
 }
 
-function budgetCategoryKeyboard(monthKey, budgetType) {
+async function budgetCategoryKeyboard(monthKey, budgetType, currency = '₽') {
   const type = normalizeBudgetType(budgetType);
   const categories = getCategoriesForBudgetType(type);
+  const budgets = await getBudgetRows();
 
-  const buttons = categories.map(category => {
-    return Markup.button.callback(category, `budgetcat:${monthKey}:${type}:${category}`);
+  const buttons = categories.map((category, index) => {
+    const existing = budgets.find(row => String(row.get('Месяц') || '').trim() === monthKey &&
+      normalizeBudgetType(row.get('Тип')) === type && normalizeCategory(row.get('Категория')) === category &&
+      String(row.get('Валюта') || '₽').trim() === currency);
+    const limit = existing ? parseAmount(existing.get('Лимит')) : 0;
+    const label = limit > 0 ? `${category}: ${formatMoney(limit, currency)}` : category;
+    return Markup.button.callback(label, `budgetpick:${monthKey}:${type === 'доход' ? 'i' : 'e'}:${index}:${currency}`);
   });
 
   const rows = [];
@@ -331,6 +362,20 @@ function budgetCategoryKeyboard(monthKey, budgetType) {
 
   rows.push([Markup.button.callback('Отмена', 'budget_cancel')]);
 
+  return Markup.inlineKeyboard(rows);
+}
+
+function budgetAmountKeyboard(monthKey, budgetType, category) {
+  const type = normalizeBudgetType(budgetType);
+  const index = getCategoriesForBudgetType(type).indexOf(category);
+  const rows = [];
+  if (index >= 0) {
+    rows.push(['₽', '$', '€'].map(currency => Markup.button.callback(
+      currency, `budgetpick:${monthKey}:${type === 'доход' ? 'i' : 'e'}:${index}:${currency}`
+    )));
+  }
+  rows.push([Markup.button.callback('Другая категория', `budget_type:${monthKey}:${type === 'доход' ? 'income' : 'expense'}`)]);
+  rows.push([Markup.button.callback('Отмена', 'budget_cancel')]);
   return Markup.inlineKeyboard(rows);
 }
 
@@ -349,6 +394,10 @@ async function saveBudget(
 
   const normalizedCategory = normalizeCategory(category);
   const normalizedType = normalizeBudgetType(budgetType);
+
+  if (!Number.isFinite(limit) || limit <= 0) throw new Error('Лимит должен быть конечным числом больше 0');
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey)) throw new Error('Некорректный месяц бюджета');
+  if (!['₽', '$', '€'].includes(currency)) throw new Error('Некорректная валюта бюджета');
 
   if (!isValidCategoryForBudgetType(normalizedCategory, normalizedType)) {
     if (normalizedType === 'расход' && isIncomeCategory(normalizedCategory)) {
@@ -397,7 +446,7 @@ async function saveBudget(
 }
 
 function parseBudgetCommand(text) {
-  const match = String(text || '').trim().match(/^\/?бюджет\s+(.+?)\s+(\d+(?:[.,]\d+)?)\s*([$€₽])?$/i);
+  const match = String(text || '').trim().match(/^\/?бюджет\s+(.+?)\s+(\d+(?:[ \u00a0\u202f]\d{3})*(?:[.,]\d{1,2})?)\s*([$€₽])?$/i);
 
   if (!match) {
     return null;
@@ -593,7 +642,7 @@ async function sendBudgets(ctx) {
         `Доходный бюджет:\n/бюджет ${monthKey === getNextMonthKey() ? 'след ' : ''}доход зарплата 550000`,
         {
           parse_mode: 'HTML',
-          reply_markup: budgetMenuKeyboard().reply_markup
+          reply_markup: budgetMenuKeyboard(monthKey).reply_markup
         }
       );
     }
@@ -672,7 +721,7 @@ async function sendBudgets(ctx) {
       msg += '\n';
     }
 
-    return ctx.replyWithHTML(msg, budgetMenuKeyboard());
+    return ctx.replyWithHTML(msg, budgetMenuKeyboard(monthKey));
 
   } catch (error) {
     console.error('Ошибка вывода бюджетов:', error);
@@ -683,6 +732,12 @@ async function sendBudgets(ctx) {
 async function showBudgetCategories(ctx) {
   try {
     await ctx.answerCbQuery();
+    clearPendingBudgetInput(ctx.chat.id);
+
+    const monthKey = ctx.callbackQuery.data.split(':')[1];
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey || '')) {
+      return ctx.reply(`Месяц бюджета: ${monthKey}\n\nВыбери тип бюджета:`, budgetTypeKeyboard(monthKey));
+    }
 
     return ctx.reply(
       'Выбери месяц, для которого нужно добавить или изменить бюджет:',
@@ -698,6 +753,7 @@ async function showBudgetCategories(ctx) {
 async function handleBudgetPeriodSelected(ctx) {
   try {
     await ctx.answerCbQuery();
+    clearPendingBudgetInput(ctx.chat.id);
 
     const data = ctx.callbackQuery.data;
     const period = data.replace('budget_period:', '');
@@ -718,6 +774,7 @@ async function handleBudgetPeriodSelected(ctx) {
 async function handleBudgetTypeSelected(ctx) {
   try {
     await ctx.answerCbQuery();
+    clearPendingBudgetInput(ctx.chat.id);
 
     const data = ctx.callbackQuery.data;
     const [, monthKey, typeRaw] = data.split(':');
@@ -727,7 +784,7 @@ async function handleBudgetTypeSelected(ctx) {
       `Месяц бюджета: ${monthKey}\n` +
       `Тип: ${budgetType}\n\n` +
       `Выбери категорию:`,
-      budgetCategoryKeyboard(monthKey, budgetType)
+      await budgetCategoryKeyboard(monthKey, budgetType)
     );
 
   } catch (error) {
@@ -742,10 +799,16 @@ async function handleBudgetCategorySelected(ctx) {
 
     const chatId = ctx.chat.id;
     const data = ctx.callbackQuery.data;
-    const [, monthKey, budgetTypeRaw, rawCategory] = data.split(':');
+    const [prefix, monthKey, budgetTypeRaw, rawCategory, selectedCurrency] = data.split(':');
 
-    const budgetType = normalizeBudgetType(budgetTypeRaw);
-    const category = normalizeCategory(rawCategory);
+    const budgetType = budgetTypeRaw === 'i' ? 'доход' : normalizeBudgetType(budgetTypeRaw);
+    const categoryValue = prefix === 'budgetpick'
+      ? getCategoriesForBudgetType(budgetType)[Number(rawCategory)] : rawCategory;
+    const currency = selectedCurrency || '₽';
+    if (!categoryValue || !/^\d{4}-(0[1-9]|1[0-2])$/.test(monthKey) || !['₽', '$', '€'].includes(currency)) {
+      return ctx.reply('Эта кнопка устарела. Открой бюджеты заново.', budgetMenuKeyboard());
+    }
+    const category = normalizeCategory(categoryValue);
 
     if (!isValidCategoryForBudgetType(category, budgetType)) {
       return ctx.reply(
@@ -757,14 +820,16 @@ async function handleBudgetCategorySelected(ctx) {
     const prevMonthDate = getPreviousMonthDate();
     const currentMonthDate = new Date();
 
-    const prevActual = await getCategorySpent(category, '₽', prevMonthDate, budgetType);
-    const currentActual = await getCategorySpent(category, '₽', currentMonthDate, budgetType);
+    const prevActual = await getCategorySpent(category, currency, prevMonthDate, budgetType);
+    const currentActual = await getCategorySpent(category, currency, currentMonthDate, budgetType);
+    const historical = await getCategoryMonthlyAverage(category, currency, budgetType, currentMonthDate);
+    const existing = await getCategoryBudget(category, currency, monthKey, budgetType);
 
     pendingBudgetInputs.set(chatId, {
       type: budgetType,
       monthKey,
       category,
-      currency: '₽'
+      currency
     });
 
     const factWord = budgetType === 'доход' ? 'получено' : 'потрачено';
@@ -774,12 +839,14 @@ async function handleBudgetCategorySelected(ctx) {
       `Категория: ${categoryIcon(category)} ${category}\n` +
       `Тип: ${budgetType}\n` +
       `Месяц бюджета: ${monthKey}\n\n` +
-      `За прошлый месяц (${getMonthTitle(prevMonthDate)}) ${factWord}: ${formatMoney(prevActual, '₽')}\n` +
-      `За текущий месяц (${getMonthTitle(currentMonthDate)}) ${factWord}: ${formatMoney(currentActual, '₽')}\n\n` +
-      `Введи сумму ${requestWord} на ${monthKey} в рублях.\n\n` +
+      `Текущий лимит: ${existing ? formatMoney(existing.limit, currency) : 'не задан'}\n\n` +
+      `За прошлый месяц (${getMonthTitle(prevMonthDate)}) ${factWord}: ${formatMoney(prevActual, currency)}\n` +
+      `В среднем за месяц за всю историю (завершённых месяцев: ${historical.months}): ${historical.average === null ? 'пока нет данных' : formatMoney(historical.average, currency)}\n` +
+      `За текущий месяц (${getMonthTitle(currentMonthDate)}) ${factWord}: ${formatMoney(currentActual, currency)}\n\n` +
+      `Введи сумму ${requestWord} на ${monthKey} (${currency}).\n\n` +
       `Пример:\n15000\n\n` +
       `Для отмены напиши: отмена`,
-      menuKeyboard()
+      budgetAmountKeyboard(monthKey, budgetType, category)
     );
 
   } catch (error) {
@@ -873,7 +940,11 @@ async function handleBudgetAmountInput(ctx) {
     }
   }
 
-  await ctx.reply(msg, menuKeyboard());
+  await ctx.reply(msg, Markup.inlineKeyboard([
+    [Markup.button.callback('Следующая категория', `budget_type:${saved.month}:${saved.type === 'доход' ? 'income' : 'expense'}`)],
+    [Markup.button.callback('Бюджеты', saved.month === getNextMonthKey() ? 'budget_view_next' : 'budget_view_current')],
+    [Markup.button.callback('Меню', 'menu')]
+  ]));
   return true;
 }
 
@@ -962,6 +1033,7 @@ async function buildBudgetReminderMessage(
 }
 
 module.exports = {
+  getCategoryMonthlyAverage,
   getCurrentMonthKey,
   getNextMonthKey,
   getCategoryBudget,
