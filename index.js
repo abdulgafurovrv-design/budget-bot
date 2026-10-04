@@ -191,6 +191,7 @@ function isCancelText(text) {
     bot.action('report_month', sendMonthReport);
 
     bot.action('budgets', async (ctx) => {
+      pendingModes.delete(ctx.chat.id);
       clearPendingBudgetInput(ctx.chat.id);
       return sendBudgets(ctx);
     });
@@ -198,7 +199,8 @@ function isCancelText(text) {
     bot.action('budget_view_current', sendBudgets);
     bot.action('budget_view_next', sendBudgets);
 
-    bot.action('budget_add', async (ctx) => {
+    bot.action(/^budget_add(?::\d{4}-\d{2})?$/, async (ctx) => {
+      pendingModes.delete(ctx.chat.id);
       clearPendingBudgetInput(ctx.chat.id);
       return showBudgetCategories(ctx);
     });
@@ -206,6 +208,7 @@ function isCancelText(text) {
     bot.action(/^budget_period:/, handleBudgetPeriodSelected);
     bot.action(/^budget_type:/, handleBudgetTypeSelected);
     bot.action(/^budgetcat:/, handleBudgetCategorySelected);
+    bot.action(/^budgetpick:/, handleBudgetCategorySelected);
     bot.action('budget_cancel', handleBudgetCancel);
 
     bot.action('transfer', async (ctx) => {
