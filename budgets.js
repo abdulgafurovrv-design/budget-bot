@@ -192,15 +192,16 @@ async function getCategorySpent(
   category,
   currency = '₽',
   monthDate = new Date(),
-  budgetType = 'расход'
+  budgetType = 'расход',
+  transactionRows = null
 ) {
   const transactionsSheet = global.transactionsSheet;
 
-  if (!transactionsSheet) {
+  if (!transactionsSheet && !transactionRows) {
     return 0;
   }
 
-  const rows = await transactionsSheet.getRows();
+  const rows = transactionRows || await transactionsSheet.getRows();
   const normalizedCategory = normalizeCategory(category);
   const normalizedType = normalizeBudgetType(budgetType);
 
@@ -238,6 +239,27 @@ async function getCategorySpent(
   });
 
   return total;
+}
+
+async function getCategoryMonthlyAverage(category, currency = '₽', budgetType = 'расход', now = new Date()) {
+  const rows = global.transactionsSheet ? await global.transactionsSheet.getRows() : [];
+  const currentMonth = now.getFullYear() * 12 + now.getMonth();
+  let firstMonth = currentMonth;
+  for (const row of rows) {
+    const date = parseRuDate(row.get('Дата'));
+    if (!date || !Number.isFinite(date.getTime())) continue;
+    firstMonth = Math.min(firstMonth, date.getFullYear() * 12 + date.getMonth());
+  }
+  const months = currentMonth - firstMonth;
+  if (!months) return { average: null, months: 0 };
+
+  let total = 0;
+  // Reuse the same snapshot and transaction exclusions as the monthly totals.
+  for (let month = firstMonth; month < currentMonth; month += 1) {
+    total += await getCategorySpent(category, currency,
+      new Date(Math.floor(month / 12), month % 12, 1), budgetType, rows);
+  }
+  return { average: total / months, months };
 }
 
 async function buildBudgetStatus(category, wallet) {
@@ -800,6 +822,7 @@ async function handleBudgetCategorySelected(ctx) {
 
     const prevActual = await getCategorySpent(category, currency, prevMonthDate, budgetType);
     const currentActual = await getCategorySpent(category, currency, currentMonthDate, budgetType);
+    const historical = await getCategoryMonthlyAverage(category, currency, budgetType, currentMonthDate);
     const existing = await getCategoryBudget(category, currency, monthKey, budgetType);
 
     pendingBudgetInputs.set(chatId, {
@@ -818,6 +841,7 @@ async function handleBudgetCategorySelected(ctx) {
       `Месяц бюджета: ${monthKey}\n\n` +
       `Текущий лимит: ${existing ? formatMoney(existing.limit, currency) : 'не задан'}\n\n` +
       `За прошлый месяц (${getMonthTitle(prevMonthDate)}) ${factWord}: ${formatMoney(prevActual, currency)}\n` +
+      `В среднем за месяц за всю историю (завершённых месяцев: ${historical.months}): ${historical.average === null ? 'пока нет данных' : formatMoney(historical.average, currency)}\n` +
       `За текущий месяц (${getMonthTitle(currentMonthDate)}) ${factWord}: ${formatMoney(currentActual, currency)}\n\n` +
       `Введи сумму ${requestWord} на ${monthKey} (${currency}).\n\n` +
       `Пример:\n15000\n\n` +
@@ -1009,6 +1033,7 @@ async function buildBudgetReminderMessage(
 }
 
 module.exports = {
+  getCategoryMonthlyAverage,
   getCurrentMonthKey,
   getNextMonthKey,
   getCategoryBudget,

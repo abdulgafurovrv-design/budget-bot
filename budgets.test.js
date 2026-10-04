@@ -87,3 +87,27 @@ test('commands accept grouped amounts and cannot save invalid months', async () 
   assert.equal(rows.length, 1);
   assert.match(ctx.replies[0].message, /Некорректный месяц/);
 });
+
+test('historical monthly average includes empty months and excludes current month and transfers', async () => {
+  let reads = 0;
+  global.transactionsSheet = { getRows: async () => {
+    reads += 1;
+    return [
+      row({ Дата: '01.01.2026', Тип: 'расход', Категория: 'продукты', Сумма: -100, Кошелёк: 'карта' }),
+      row({ Дата: '05.02.2026', Тип: 'расход', Категория: 'кафе', Сумма: -600, Кошелёк: 'карта' }),
+      row({ Дата: '06.02.2026', Тип: 'перевод', Категория: 'кафе', Сумма: -9000, Кошелёк: 'карта' }),
+      row({ Дата: '06.02.2026', Тип: 'расход', Категория: 'кафе', Сумма: -9000, Кошелёк: 'доллары' }),
+      row({ Дата: '01.04.2026', Тип: 'расход', Категория: 'кафе', Сумма: -3000, Кошелёк: 'карта' }),
+      row({ Дата: '05.02.2026', Тип: 'доход', Категория: 'зарплата', Сумма: 6000, Кошелёк: 'карта' })
+    ];
+  } };
+  assert.deepEqual(await budgets.getCategoryMonthlyAverage('кафе', '₽', 'расход', new Date(2026, 3, 4)), { average: 200, months: 3 });
+  assert.equal(reads, 1);
+  assert.deepEqual(await budgets.getCategoryMonthlyAverage('зарплата', '₽', 'доход', new Date(2026, 3, 4)), { average: 2000, months: 3 });
+});
+
+test('historical average distinguishes missing history from zero spending', async () => {
+  assert.deepEqual(await budgets.getCategoryMonthlyAverage('кафе'), { average: null, months: 0 });
+  global.transactionsSheet = { getRows: async () => [row({ Дата: '02.04.2026' })] };
+  assert.deepEqual(await budgets.getCategoryMonthlyAverage('кафе', '₽', 'расход', new Date(2026, 3, 4)), { average: null, months: 0 });
+});
